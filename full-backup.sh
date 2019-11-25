@@ -3,7 +3,7 @@
 use_adb_root=false
 tar_backup=true
 image_backup=true
-extra_backup=true
+extra_backup=false
 
 if [[ $# -gt 0 ]]; then
     for param in $@; do
@@ -57,7 +57,7 @@ echo "Devices detected:"
 adb devices
 
 echo "Checking for root access..."
-if [ $(adb shell whoami) != "root" ]; then
+if [ $(adb shell su root whoami) != "root" ]; then
     echo "Need root access. Please use TWRP for this!"
     if $use_adb_root; then
         echo "Requesting root..."
@@ -70,19 +70,19 @@ if [ $(adb shell whoami) != "root" ]; then
 fi
 
 echo "Checking for presence of /data"
-if ! [ "$(adb shell ls /data/ | wc -l)" -gt 1 ]; then
-    adb shell mount /data
+if ! [ "$(adb shell su root ls /data/ | wc -l)" -gt 1 ]; then
+    adb shell su root mount /data
 fi
 
-if ! [ "$(adb shell ls /data/ | wc -l)" -gt 4 ]; then
+if ! [ "$(adb shell su root ls /data/ | wc -l)" -gt 4 ]; then
     echo "It seems like /data is not in a sane state!"
-    adb shell ls /data || :
-    adb shell stat /data || :
+    adb shell su root ls /data || :
+    adb shell su root stat /data || :
     exit 1
 fi
 
 echo "Determining architecture..."
-target_arch="$(adb shell uname -m)"
+target_arch="$(adb shell su root uname -m)"
 case $target_arch in
     aarch64|arm64|armv8|armv8a)
         target_arch=arm64
@@ -109,9 +109,10 @@ case $target_arch in
 esac
 
 echo "Pushing busybox to device..."
-adb push busybox-ndk/busybox-$target_arch /dev/busybox
-adb shell chmod +x /dev/busybox
-if ! adb shell /dev/busybox >/dev/null; then
+adb push busybox-ndk/busybox-$target_arch /sdcard/busybox
+adb shell su root mv /sdcard/busybox /dev/busybox
+adb shell su root chmod +x /dev/busybox
+if ! adb shell su root /dev/busybox >/dev/null; then
     echo "Busybox doesn't work here!"
     exit 1
 fi
@@ -125,20 +126,20 @@ pushd "$backup_name"
 
 if $tar_backup; then
     echo "Creating full tar backup of /data"
-    adb shell '/dev/busybox tar -cv -C /data . | gzip' | gzip -d | pv -trabi 1 | gzip -c9 > data.tar.gz
+    adb shell su root '/dev/busybox tar -cv -C /data . | gzip' | gzip -d | pv -trabi 1 | gzip -c9 > data.tar.gz
 fi
 
 if $image_backup; then
     echo "Creating image backup..."
     #adb shell 'dd if=/dev/block/bootdevice/by-name/userdata bs=16777216 | gzip' | gzip -d | pv -trabi 1 | gzip -c9 > data.img.gz
     #adb shell 'dd if=/dev/block/vdc bs=16777216 | gzip' | gzip -d | pv -trabi 1 | gzip -c9 > data.img.gz
-    adb shell 'dd if=/dev/block/dm-0 bs=16777216 | gzip' | gzip -d | pv -trabi 1 | gzip -c9 > data.img.gz
+    adb shell su root 'dd if=/dev/block/dm-0 bs=16777216 | gzip' | gzip -d | pv -trabi 1 | gzip -c9 > data.img.gz
 
     echo "Verifying image backup..."
     echo -n "  Calculate checksum on device: "
     #device_checksum="$(adb shell /dev/busybox sha256sum /dev/block/bootdevice/by-name/userdata | cut -d ' ' -f1)"
     #device_checksum="$(adb shell /dev/busybox sha256sum /dev/block/vdc | cut -d ' ' -f1)"
-    device_checksum="$(adb shell /dev/busybox sha256sum /dev/block/dm-0 | cut -d ' ' -f1)"
+    device_checksum="$(adb shell su root /dev/busybox sha256sum /dev/block/dm-0 | cut -d ' ' -f1)"
     echo "$device_checksum"
     echo -n "  Calculate checksum locally: "
     local_checksum="$(gzip -d < data.img.gz | sha256sum | cut -d ' ' -f1)"
@@ -157,9 +158,9 @@ if $extra_backup; then
     mkdir -p device_data
     pushd device_data
 
-    if adb shell [ -d /data/data/com.google.android.apps.authenticator2 ]; then
+    if adb shell su root [ -d /data/data/com.google.android.apps.authenticator2 ]; then
         echo "  - Google Authenticator"
-        adb pull /data/data/com.google.android.apps.authenticator2 ./
+        adb shell pull /data/data/com.google.android.apps.authenticator2 ./
     fi
     if adb shell [ -d /data/data/com.zeapo/pwdstore ]; then
         echo "  - Password Store"
@@ -190,6 +191,15 @@ if $extra_backup; then
     adb pull /data/misc/. .
 
     popd # device_misc
+
+    # test pulling apps
+
+    mkdir -p device_app
+    pushd device_app
+
+    adb pull /data/app/. .
+
+    popd # app_data
 
     if adb shell /dev/busybox [ -d /data/unencrypted ]; then
         mkdir -p unencrypted
