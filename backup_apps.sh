@@ -117,12 +117,13 @@ SYSTEM_PATTERN="/system/app"
 for APP in `echo $PACKAGES | tr " " "\n" | grep "${SYSTEM_PATTERN}\|${DATA_PATTERN}"`; do
 	echo $APP
 
-	appPath=`echo $APP | sed 's/package://' | cut -d "=" -f 1`
+	appPath=`echo $APP | sed 's/package://' | rev | cut -d "=" -f2- | rev`
 	appDir=${appPath%/*}
-	dataDir=`echo $APP | sed 's/package://' | cut -d "=" -f 2`
-#	echo $appPath
-#	echo $appDir
-#	echo $dataDir
+	dataDir=`echo $APP | sed 's/package://' | rev | cut -d "=" -f1 | rev`
+
+	#echo $appPath
+	#echo $appDir
+	#echo $dataDir
 
 	$DRY $AS "/dev/busybox tar -cv -C $appDir . | gzip" | gzip -d | pv -trabi 1 | gzip -c9 > app_${dataDir}.tar.gz
 	$DRY $AS "/dev/busybox tar -cv -C /data/data/$dataDir . | gzip" | gzip -d | pv -trabi 1 | gzip -c9 > data_${dataDir}.tar.gz
