@@ -9,7 +9,10 @@
 set -e   # fail early
 
 DRY=""
-if [[ "$1" == "-d" ]]; then shift;  DRY="echo" ; fi
+if [[ "$1" == "-d" ]]; then shift; DRY="echo" ; fi
+
+SYSTEM_PATTERN=""
+if [[ "$1" == "-system" ]]; then shift; SYSTEM_PATTERN="/system/app" ; fi
 
 A="adb"
 AS="adb shell su root"
@@ -112,9 +115,10 @@ echo "## Pull apps"
 
 DATADIR=""
 DATA_PATTERN="/data/app"
-SYSTEM_PATTERN="/system/app"
+PATTERN=$DATA_PATTERN
+if [[ "$SYSTEM_PATTERN" != "" ]]; then PATTERN="$SYSTEM_PATTERN}\|$DATA_PATTERN" ; fi
 
-for APP in `echo $PACKAGES | tr " " "\n" | grep "${SYSTEM_PATTERN}\|${DATA_PATTERN}"`; do
+for APP in `echo $PACKAGES | tr " " "\n" | grep "${PATTERN}"`; do
 	echo $APP
 
 	appPath=`echo $APP | sed 's/package://' | rev | cut -d "=" -f2- | rev`
