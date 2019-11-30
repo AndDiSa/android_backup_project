@@ -15,7 +15,7 @@ SYSTEM_PATTERN=""
 if [[ "$1" == "-system" ]]; then shift; SYSTEM_PATTERN="/system/app" ; fi
 
 A="adb"
-AS="adb shell su root"
+AS="adb shell su -c "
 
 
 if [ ! -d busybox-ndk ]; then
@@ -108,7 +108,7 @@ echo "### Creating dir $DIR"
 $DRY mkdir -p $DIR
 $DRY cd $DIR
 
-PACKAGES=`$DRY $AS "cmd package list packages -f"`
+PACKAGES=`$DRY $A shell "cmd package list packages -f"`
 echo $PACKAGES
 echo "## Stop Runtime" && $DRY $AS stop
 echo "## Pull apps"
@@ -125,12 +125,17 @@ for APP in `echo $PACKAGES | tr " " "\n" | grep "${PATTERN}"`; do
 	appDir=${appPath%/*}
 	dataDir=`echo $APP | sed 's/package://' | rev | cut -d "=" -f1 | rev`
 
-	#echo $appPath
-	#echo $appDir
-	#echo $dataDir
+	echo $appPath
+	echo $appDir
+	echo $dataDir
 
-	$DRY $AS "/dev/busybox tar -cv -C $appDir . | gzip" | gzip -d | pv -trabi 1 | gzip -c9 > app_${dataDir}.tar.gz
-	$DRY $AS "/dev/busybox tar -cv -C /data/data/$dataDir . | gzip" | gzip -d | pv -trabi 1 | gzip -c9 > data_${dataDir}.tar.gz
+#	package:/data/app/com.google.android.apps.gcs-EmZxhIV4iomj2W20ERQ4xQ==/base.apk=com.google.android.apps.gcs
+#	/data/app/com.google.android.apps.gcs-EmZxhIV4iomj2W20ERQ4xQ==/base.apk
+#	/data/app/com.google.android.apps.gcs-EmZxhIV4iomj2W20ERQ4xQ==
+#	com.google.android.apps.gcs
+
+	adb shell "su -c 'cd $appDir && /dev/busybox tar czf - ./ | base64' 2>/dev/null" | base64 -d | pv -trabi 1 > app_${dataDir}.tar.gz
+	adb shell "su -c 'cd /data/data/$dataDir && /dev/busybox tar czf - ./ | base64' 2>/dev/null" | base64 -d | pv -trabi 1 > data_${dataDir}.tar.gz
 done
 
 echo "## Restart Runtime" && $DRY $AS start
