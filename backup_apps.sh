@@ -15,7 +15,8 @@ SYSTEM_PATTERN=""
 if [[ "$1" == "-system" ]]; then shift; SYSTEM_PATTERN="/system/app" ; fi
 
 A="adb"
-AS="adb shell su -c "
+AMAGISK="adb shell su -c " 	# -- needed for magisk rooted devices
+AROOT="adb shell su root " # -- needed for adb inscure devices
 
 
 if [ ! -d busybox-ndk ]; then
@@ -27,22 +28,29 @@ else
 fi
 
 echo "Waiting for device..."
-adb wait-for-any
+$A wait-for-any
 
 echo "Devices detected:"
-adb devices
+$A devices
 
 echo "Checking for root access..."
-if [ $($AS whoami) != "root" ]; then
-    echo "Need root access. Please use TWRP for this!"
+if [ $($AROOT whoami) != "root" ]; then
     if $use_adb_root; then
         echo "Requesting root..."
-        adb root
+        $A root
         echo "Waiting for device..."
-        adb wait-for-any
-    else
-        exit 1
+        $A wait-for-any
     fi
+fi
+
+if [ $($AROOT whoami) != "root" ]; then
+    if [ $($AMAGISK whoami) == "root" ]; then
+	    AS=$AMAGISK
+    else
+	exit 1
+    fi
+else
+    AS=$AROOT
 fi
 
 echo "Checking for presence of /data"
@@ -134,8 +142,21 @@ for APP in `echo $PACKAGES | tr " " "\n" | grep "${PATTERN}"`; do
 #	/data/app/com.google.android.apps.gcs-EmZxhIV4iomj2W20ERQ4xQ==
 #	com.google.android.apps.gcs
 
-	adb shell "su -c 'cd $appDir && /dev/busybox tar czf - ./ | base64' 2>/dev/null" | base64 -d | pv -trabi 1 > app_${dataDir}.tar.gz
-	adb shell "su -c 'cd /data/data/$dataDir && /dev/busybox tar czf - ./ | base64' 2>/dev/null" | base64 -d | pv -trabi 1 > data_${dataDir}.tar.gz
+        if [[ "$AS" == "$AMAGISK" ]]; then
+#
+# --- version for magisk rooted
+#
+		$DRY $AS "'cd $appDir && /dev/busybox tar czf - ./ | base64' 2>/dev/null" | base64 -d | pv -trabi 1 > app_${dataDir}.tar.gz
+		$DRY $AS "'cd /data/data/$dataDir && /dev/busybox tar czf - ./ | base64' 2>/dev/null" | base64 -d | pv -trabi 1 > data_${dataDir}.tar.gz
+		#adb shell "su -c 'cd $appDir && /dev/busybox tar czf - ./ | base64' 2>/dev/null" | base64 -d | pv -trabi 1 > app_${dataDir}.tar.gz
+		#adb shell "su -c 'cd /data/data/$dataDir && /dev/busybox tar czf - ./ | base64' 2>/dev/null" | base64 -d | pv -trabi 1 > data_${dataDir}.tar.gz
+	else
+#
+# --- version for adb insecure
+#
+       		$DRY $AS "/dev/busybox tar -cv -C $appDir . | gzip" | gzip -d | pv -trabi 1 | gzip -c9 > app_${dataDir}.tar.gz
+       		$DRY $AS "/dev/busybox tar -cv -C /data/data/$dataDir . | gzip" | gzip -d | pv -trabi 1 | gzip -c9 > data_${dataDir}.tar.gz
+	fi
 done
 
 echo "## Restart Runtime" && $DRY $AS start

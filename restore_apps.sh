@@ -99,7 +99,7 @@ do
 	echo
 	echo "## Now installing app data"
 	echo "## Stop Runtime" && $DRY $AS stop
-	$DRY sleep 5	
+	$DRY sleep 10
 
 	echo "Attempting to restore data for $APP"
 	# figure out current app user id
@@ -124,8 +124,8 @@ do
 	$DRY $AS "chown -R $ID.$ID /data/data/$dataDir" || true
 	echo "## Restart Runtime" 
 	$DRY $AS start
-	$DRY sleep 5	
+	$DRY sleep 10
 done
 [[ -n $DRY ]] && echo "==== This is DRY MODE. Use --doit to actually copy."
 echo "Yoscript exiting after adb install will want to fix securelinux perms with: restorecon -FRDv /data/data"
-$DRY $AS "restorecon -FRDV /data/data"
+$DRY $AS "restorecon -FRDv /data/data"
