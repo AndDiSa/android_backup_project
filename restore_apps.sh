@@ -53,23 +53,22 @@ echo "Devices detected:"
 $A devices
 
 echo "Checking for root access..."
-if [ $($AROOT whoami) != "root" ]; then
-    if $use_adb_root; then
-        echo "Requesting root..."
-        $A root
-        echo "Waiting for device..."
-        $A wait-for-any
-    fi
-fi
-
-if [ $($AROOT whoami) != "root" ]; then
-    if [ $($AMAGISK whoami) == "root" ]; then
-            AS=$AMAGISK
-    else
-        exit 1
-    fi
+if [ $($AMAGISK whoami) == "root" ]; then
+       AS=$AMAGISK
 else
-    AS=$AROOT
+       if [ $($AROOT whoami) == "root" ]; then
+               AS=$AROOT
+       else
+               echo "Requesting root..."
+               $A root
+               echo "Waiting for device..."
+               $A wait-for-any
+       fi
+       if [ $($AROOT whoami) == "root" ]; then
+               AS=$AROOT
+       else
+               exit 1
+       fi
 fi
 
 echo "Determining architecture..."
