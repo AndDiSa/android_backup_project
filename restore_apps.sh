@@ -9,7 +9,9 @@
 set -e   # fail early
 
 A="adb"
-AS="adb shell su root"
+AMAGISK="adb shell su -c "	# -- needed for magisk rooted devices
+AROOT="adb shell su root "	# -- needed for adb inscure devices
+
 OLDIFS="$IFS"
 
 DRY="echo"
@@ -51,16 +53,60 @@ echo "Devices detected:"
 $A devices
 
 echo "Checking for root access..."
-if [ $($AS whoami) != "root" ]; then
-    echo "Need root access. Please use TWRP or a rooted device for this!"
+if [ $($AROOT whoami) != "root" ]; then
     if $use_adb_root; then
         echo "Requesting root..."
         $A root
         echo "Waiting for device..."
         $A wait-for-any
+    fi
+fi
+
+if [ $($AROOT whoami) != "root" ]; then
+    if [ $($AMAGISK whoami) == "root" ]; then
+            AS=$AMAGISK
     else
         exit 1
     fi
+else
+    AS=$AROOT
+fi
+
+echo "Determining architecture..."
+target_arch="$($AS uname -m)"
+case $target_arch in
+    aarch64|arm64|armv8|armv8a)
+        target_arch=arm64
+        ;;
+    aarch32|arm32|arm|armv7|armv7a|arm-neon|armv7a-neon|aarch|ARM)
+        target_arch=arm
+        ;;
+    mips|MIPS|mips32|arch-mips32)
+        target_arch=mips
+        ;;
+    mips64|MIPS64|arch-mips64)
+        target_arch=mips64
+        ;;
+    x86|x86_32|IA32|ia32|intel32|i386|i486|i586|i686|intel)
+        target_arch=x86
+        ;;
+    x86_64|x64|amd64|AMD64|amd)
+        target_arch=x86_64
+        ;;
+    *)
+        echo "Unrecognized architecture $target_arch"
+        exit 1
+        ;;
+esac
+
+echo "Pushing busybox to device..."
+$A push busybox-ndk/busybox-$target_arch /sdcard/busybox
+$AS "mv /sdcard/busybox /dev/busybox"
+$AS "chmod +x /dev/busybox"
+
+if ! $AS "/dev/busybox >/dev/null"; then
+    echo "Busybox doesn't work here!"
+    exit 1
 fi
 
 cd $DIR
@@ -73,7 +119,7 @@ else
 	echo "## Push all apps in $DIR: $APPS"
 fi
 
-echo "## Install missing apps"
+echo "## Installng apps"
 for appPackage in $APPS
 do
 	APP=`tar xvfz $appPackage -C /tmp/ --wildcards "*.apk" | sed 's/\.\///'`
@@ -81,16 +127,17 @@ do
 	echo $APP
 	echo "Installing $APP"
 	pushd /tmp
-	error=`$DRY exec $A install -r -t ${APP}`
+	error=`$DRY $A install -r -t ${APP}`
 	echo "error=$error"
 	rm *.apk
 	popd
 
-	appPrefix=`echo $appPackage | sed 's/app_//' | sed 's/\.tar\.gz//'`
+	appPrefix=$(echo $appPackage | sed 's/app_//' | sed 's/\.tar\.gz//')
 	echo $appPrefix
-	#allApps=`$AS cmd package list packages -f`
-	#appConfig=`echo $appApps | tr " " "\n" | grep $appPrefix`
-	#echo $appConfig
+	allApps=`$A shell cmd package list packages -f`
+	#echo $allApps
+	appConfig=$(echo $allApps | tr " " "\n" | grep $appPrefix)
+	echo "$appConfig"
 
 	#dataDir=`echo $appConfig | sed 's/package://' | rev | cut -d "=" -f1 | rev`
 	dataDir=$appPrefix
@@ -98,8 +145,8 @@ do
 
 	echo
 	echo "## Now installing app data"
-	echo "## Stop Runtime" && $DRY $AS stop
-	$DRY sleep 10
+	$DRY $AS "pm clear $appPrefix"
+	$DRY sleep 1
 
 	echo "Attempting to restore data for $APP"
 	# figure out current app user id
@@ -122,10 +169,9 @@ do
 	$DRY $AS "/dev/busybox tar xfz /sdcard/$dataPackage -C /data/data/$dataDir"
 	$DRY $AS "rm /sdcard/$dataPackage"
 	$DRY $AS "chown -R $ID.$ID /data/data/$dataDir" || true
-	echo "## Restart Runtime" 
-	$DRY $AS start
-	$DRY sleep 10
 done
 [[ -n $DRY ]] && echo "==== This is DRY MODE. Use --doit to actually copy."
 echo "Yoscript exiting after adb install will want to fix securelinux perms with: restorecon -FRDv /data/data"
 $DRY $AS "restorecon -FRDv /data/data"
+$DRY $AS "rm /dev/busybox"
+
