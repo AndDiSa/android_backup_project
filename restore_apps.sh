@@ -14,7 +14,7 @@ OLDIFS="$IFS"
 cat <<EOF
 WARNING: restoring random system apps is quite likely to make things worse
 unless you are copying between 2 identical devices.
-You probably want to mv backupdir/data/{com.android,com.google}* /backup/location
+You probably want to mv backupdir/app_{com.android,com.google}* /backup/location
 This will cause this script not to try and restore system app data
 
 EOF

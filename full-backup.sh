@@ -1,4 +1,11 @@
-#!/bin/bash -e
+#!/bin/bash
+# License; Apache-2
+# anddisa@gmail.com 2019/12
+
+curr_dir="$(dirname "$0")"
+. "$curr_dir/functions.sh"
+
+set -e   # fail early
 
 use_adb_root=false
 tar_backup=true
@@ -12,9 +19,6 @@ if [[ $# -gt 0 ]]; then
                 echo "Makes a full backup over ADB"
                 echo "tar /data, binary img /data block"
                 exit 0
-                ;;
-            --use-adb-root)
-                use_adb_root=true
                 ;;
             --tar-backup)
                 tar_backup=true
@@ -42,104 +46,34 @@ if [[ $# -gt 0 ]]; then
     done
 fi
 
-if [ ! -d busybox-ndk ]; then
-    git clone https://github.com/Magisk-Modules-Repo/busybox-ndk
-else
-    pushd busybox-ndk
-    git pull
-    popd
-fi
+updateBusybox
 
-echo "Waiting for device..."
-adb wait-for-any
+lookForAdbDevice
 
-echo "Devices detected:"
-adb devices
+checkRootType
 
-echo "Checking for root access..."
-if [ $(adb shell su root whoami) != "root" ]; then
-    echo "Need root access. Please use TWRP for this!"
-    if $use_adb_root; then
-        echo "Requesting root..."
-        adb root
-        echo "Waiting for device..."
-        adb wait-for-any
-    else
-        exit 1
-    fi
-fi
+checkForCleanData
 
-echo "Checking for presence of /data"
-if ! [ "$(adb shell su root ls /data/ | wc -l)" -gt 1 ]; then
-    adb shell su root mount /data
-fi
+pushBusybox
 
-if ! [ "$(adb shell su root ls /data/ | wc -l)" -gt 4 ]; then
-    echo "It seems like /data is not in a sane state!"
-    adb shell su root ls /data || :
-    adb shell su root stat /data || :
-    exit 1
-fi
+mkBackupDir
+pushd "$DIR"
 
-echo "Determining architecture..."
-target_arch="$(adb shell su root uname -m)"
-case $target_arch in
-    aarch64|arm64|armv8|armv8a)
-        target_arch=arm64
-        ;;
-    aarch32|arm32|arm|armv7|armv7a|arm-neon|armv7a-neon|aarch|ARM)
-        target_arch=arm
-        ;;
-    mips|MIPS|mips32|arch-mips32)
-        target_arch=mips
-        ;;
-    mips64|MIPS64|arch-mips64)
-        target_arch=mips64
-        ;;
-    x86|x86_32|IA32|ia32|intel32|i386|i486|i586|i686|intel)
-        target_arch=x86
-        ;;
-    x86_64|x64|amd64|AMD64|amd)
-        target_arch=x86_64
-        ;;
-    *)
-        echo "Unrecognized architecture $target_arch"
-        exit 1
-        ;;
-esac
-
-echo "Pushing busybox to device..."
-adb push busybox-ndk/busybox-$target_arch /sdcard/busybox
-adb shell su root mv /sdcard/busybox /dev/busybox
-adb shell su root chmod +x /dev/busybox
-if ! adb shell su root /dev/busybox >/dev/null; then
-    echo "Busybox doesn't work here!"
-    exit 1
-fi
-
-backup_name="backup-$(date +'%Y%m%d-%H%M%S')"
-mkdir -p "$backup_name"
-pushd "$backup_name"
-
-#echo "Remounting data read-only"
-#adb shell mount -o remount,ro /data
+stopRuntime
 
 if $tar_backup; then
     echo "Creating full tar backup of /data"
-    adb shell su root '/dev/busybox tar -cv -C /data . | gzip' | gzip -d | pv -trabi 1 | gzip -c9 > data.tar.gz
+    $AS '/dev/busybox tar -cv -C /data . | gzip' | gzip -d | pv -trabi 1 | gzip -c9 > data.tar.gz
 fi
 
 if $image_backup; then
     echo "Creating image backup..."
-    #adb shell 'dd if=/dev/block/bootdevice/by-name/userdata bs=16777216 | gzip' | gzip -d | pv -trabi 1 | gzip -c9 > data.img.gz
-    #adb shell 'dd if=/dev/block/vdc bs=16777216 | gzip' | gzip -d | pv -trabi 1 | gzip -c9 > data.img.gz
-    adb shell su root 'dd if=/dev/block/dm-0 bs=16777216 | gzip' | gzip -d | pv -trabi 1 | gzip -c9 > data.img.gz
+    #get data image location
+    $AS 'dd if=/dev/block/dm-0 bs=16777216 | gzip' | gzip -d | pv -trabi 1 | gzip -c9 > data.img.gz
 
     echo "Verifying image backup..."
     echo -n "  Calculate checksum on device: "
-    #device_checksum="$(adb shell /dev/busybox sha256sum /dev/block/bootdevice/by-name/userdata | cut -d ' ' -f1)"
-    #device_checksum="$(adb shell /dev/busybox sha256sum /dev/block/vdc | cut -d ' ' -f1)"
-    device_checksum="$(adb shell su root /dev/busybox sha256sum /dev/block/dm-0 | cut -d ' ' -f1)"
+    device_checksum="$($AS /dev/busybox sha256sum /dev/block/dm-0 | cut -d ' ' -f1)"
     echo "$device_checksum"
     echo -n "  Calculate checksum locally: "
     local_checksum="$(gzip -d < data.img.gz | sha256sum | cut -d ' ' -f1)"
@@ -152,35 +86,38 @@ if $image_backup; then
     fi
 fi
 
+##
+## does not yet work -> need to be super user !
+##
 if $extra_backup; then
 
     echo "Creating backup of important app data..."
     mkdir -p device_data
     pushd device_data
 
-    if adb shell su root [ -d /data/data/com.google.android.apps.authenticator2 ]; then
+    if $A shell [ -d /data/data/com.google.android.apps.authenticator2 ]; then
         echo "  - Google Authenticator"
-        adb shell pull /data/data/com.google.android.apps.authenticator2 ./
+        $A pull /data/data/com.google.android.apps.authenticator2 ./
     fi
-    if adb shell [ -d /data/data/com.zeapo/pwdstore ]; then
+    if $A shell [ -d /data/data/com.zeapo/pwdstore ]; then
         echo "  - Password Store"
-        adb pull /data/data/com.zeapo/pwdstore ./
+        $A pull /data/data/com.zeapo/pwdstore ./
     fi
-    if adb shell [ -d /data/data/org.sufficientlysecure.keychain ]; then
+    if $A shell [ -d /data/data/org.sufficientlysecure.keychain ]; then
         echo "  - OpenKeyChain"
-        adb pull /data/data/org.sufficientlysecure.keychain ./
+        $A pull /data/data/org.sufficientlysecure.keychain ./
     fi
-    if adb shell [ -d /data/data/de.fiducia.smartphone.securego.vr ]; then
+    if $A shell [ -d /data/data/de.fiducia.smartphone.securego.vr ]; then
         echo "  - VR SecureGo"
-        adb pull /data/data/de.fiducia.smartphone.securego.vr ./
+        $A pull /data/data/de.fiducia.smartphone.securego.vr ./
     fi
-    if adb shell [ -d /data/data/de.fiduciagad.android.vrwallet ]; then
+    if $A shell [ -d /data/data/de.fiduciagad.android.vrwallet ]; then
         echo "  - VR Wallet"
-        adb pull /data/data/de.fiduciagad.android.vrwallet ./
+        $A pull /data/data/de.fiduciagad.android.vrwallet ./
     fi
-    if adb shell [ -d /data/data/de.fiducia.smartphone.android.banking.vr ]; then
+    if $A shell [ -d /data/data/de.fiducia.smartphone.android.banking.vr ]; then
         echo "  - VR Banking"
-        adb pull /data/data/de.fiducia.smartphone.android.banking.vr ./
+        $A pull /data/data/de.fiducia.smartphone.android.banking.vr ./
     fi
 
     popd # device_data
@@ -188,7 +125,7 @@ if $extra_backup; then
     mkdir -p device_misc
     pushd device_misc
 
-    adb pull /data/misc/. .
+    $A pull /data/misc/. .
 
     popd # device_misc
 
@@ -197,19 +134,23 @@ if $extra_backup; then
     mkdir -p device_app
     pushd device_app
 
-    adb pull /data/app/. .
+    $A pull /data/app/. .
 
     popd # app_data
 
-    if adb shell /dev/busybox [ -d /data/unencrypted ]; then
+    if $A shell /dev/busybox [ -d /data/unencrypted ]; then
         mkdir -p unencrypted
         pushd unencrypted
 
-        adb pull /data/unencrypted/. .
+        $A pull /data/unencrypted/. .
 
         popd # unencrypted
     fi
 fi
 
-popd # $backup_name
+startRuntime
+
+cleanUp
+
+popd # $DIR
 

@@ -22,19 +22,8 @@ checkForCleanData
 
 pushBusybox
 
-HW=`$AS getprop ro.hardware | tr -d '\r'`
-BUILD=`$AS getprop ro.build.id | tr -d '\r'`
-
-DATE=`date +%F`
-DIR="${HW}_${DATE}_${BUILD}"
-if test -d "$DIR"; then
-    echo "$DIR already exists, exiting"
-    exit 2
-fi
-
-echo "### Creating dir $DIR"
-mkdir -p $DIR
-cd $DIR
+mkBackupDir
+pushd $DIR
 
 PACKAGES=$($A shell "cmd package list packages -f")
 echo $PACKAGES
@@ -77,3 +66,4 @@ done
 cleanup
 
 startRuntime
+popd
