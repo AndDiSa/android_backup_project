@@ -8,8 +8,9 @@ curr_dir="$(dirname "$0")"
 set -e   # fail early
 
 use_adb_root=false
-tar_backup=true
-image_backup=true
+data_backup=true
+media_backup=false
+image_backup=false
 extra_backup=false
 
 if [[ $# -gt 0 ]]; then
@@ -20,11 +21,17 @@ if [[ $# -gt 0 ]]; then
                 echo "tar /data, binary img /data block"
                 exit 0
                 ;;
-            --tar-backup)
-                tar_backup=true
+            --data-backup)
+                data_backup=true
                 ;;
-            --no-tar-backup)
-                tar_backup=false
+            --no-data-backup)
+                data_backup=false
+                ;;
+            --media-backup)
+                media_backup=true
+                ;;
+            --no-media-backup)
+                media_backup=false
                 ;;
             --image-backup)
                 image_backup=true
@@ -61,19 +68,35 @@ pushd "$DIR"
 
 stopRuntime
 
-if $tar_backup; then
-    echo "Creating full tar backup of /data"
-    $AS '/dev/busybox tar -cv -C /data . | gzip' | gzip -d | pv -trabi 1 | gzip -c9 > data.tar.gz
+if $data_backup; then
+    echo "Creating full tar backup of /data excluding /data/media"
+    if [[ "$AS" == "$AMAGISK" ]]; then
+    	$AS 'cd /data && /dev/busybox tar -czf - --exclude="media" --exclude="mediadrm" ./ | base64 2>/dev/null"' | base64 -d | pv -trabi 1 > data.tar.gz
+    else
+    	$AS '/dev/busybox tar -cv -C /data --exclude="/data/media" --exclude="/data/mediadrm" . | gzip' | gzip -d | pv -trabi 1 | gzip -c9 > data.tar.gz
+    fi
+fi
+
+if $media_backup; then
+    echo "Creating full tar backup of /data/media"
+    if [[ "$AS" == "$AMAGISK" ]]; then
+    	$AS 'cd /data/media && /dev/busybox tar -czf - ./ | base64 2>/dev/null"' | base64 -d | pv -trabi 1 > data_media.tar.gz
+    	$AS 'cd /data/mediadrm && /dev/busybox tar -czf - ./ | base64 2>/dev/null"' | base64 -d | pv -trabi 1 > data_mediadrm.tar.gz
+    else
+    	$AS '/dev/busybox tar -cv -C /data/media . | gzip' | gzip -d | pv -trabi 1 | gzip -c9 > data_media.tar.gz
+    	$AS '/dev/busybox tar -cv -C /data/mediadrm . | gzip' | gzip -d | pv -trabi 1 | gzip -c9 > data_mediadrm.tar.gz
+    fi
 fi
 
 if $image_backup; then
     echo "Creating image backup..."
     #get data image location
-    $AS 'dd if=/dev/block/dm-0 bs=16777216 | gzip' | gzip -d | pv -trabi 1 | gzip -c9 > data.img.gz
+    PARTITION=$($AS mount | grep " /data " | cut -d ' ' -f1)
+    $AS "dd if=$PARTITION bs=16777216 | gzip" | gzip -d | pv -trabi 1 | gzip -c9 > data.img.gz
 
     echo "Verifying image backup..."
     echo -n "  Calculate checksum on device: "
-    device_checksum="$($AS /dev/busybox sha256sum /dev/block/dm-0 | cut -d ' ' -f1)"
+    device_checksum="$($AS /dev/busybox sha256sum $PARTITION | cut -d ' ' -f1)"
     echo "$device_checksum"
     echo -n "  Calculate checksum locally: "
     local_checksum="$(gzip -d < data.img.gz | sha256sum | cut -d ' ' -f1)"
@@ -148,9 +171,9 @@ if $extra_backup; then
     fi
 fi
 
-startRuntime
+cleanup
 
-cleanUp
+startRuntime
 
 popd # $DIR
 
