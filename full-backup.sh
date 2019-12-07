@@ -92,7 +92,7 @@ if $image_backup; then
     echo "Creating image backup..."
     #get data image location
     PARTITION=$($AS mount | grep " /data " | cut -d ' ' -f1)
-    $AS "dd if=$PARTITION bs=16777216 | gzip" | gzip -d | pv -trabi 1 | gzip -c9 > data.img.gz
+    $AS "/dev/busybox dd if=$PARTITION bs=16777216 | gzip" | gzip -d | pv -trabi 1 | gzip -c9 > data.img.gz
 
     echo "Verifying image backup..."
     echo -n "  Calculate checksum on device: "
