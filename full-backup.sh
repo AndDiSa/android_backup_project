@@ -109,68 +109,6 @@ if $image_backup; then
     fi
 fi
 
-##
-## does not yet work -> need to be super user !
-##
-if $extra_backup; then
-
-    echo "Creating backup of important app data..."
-    mkdir -p device_data
-    pushd device_data
-
-    if $A shell [ -d /data/data/com.google.android.apps.authenticator2 ]; then
-        echo "  - Google Authenticator"
-        $A pull /data/data/com.google.android.apps.authenticator2 ./
-    fi
-    if $A shell [ -d /data/data/com.zeapo/pwdstore ]; then
-        echo "  - Password Store"
-        $A pull /data/data/com.zeapo/pwdstore ./
-    fi
-    if $A shell [ -d /data/data/org.sufficientlysecure.keychain ]; then
-        echo "  - OpenKeyChain"
-        $A pull /data/data/org.sufficientlysecure.keychain ./
-    fi
-    if $A shell [ -d /data/data/de.fiducia.smartphone.securego.vr ]; then
-        echo "  - VR SecureGo"
-        $A pull /data/data/de.fiducia.smartphone.securego.vr ./
-    fi
-    if $A shell [ -d /data/data/de.fiduciagad.android.vrwallet ]; then
-        echo "  - VR Wallet"
-        $A pull /data/data/de.fiduciagad.android.vrwallet ./
-    fi
-    if $A shell [ -d /data/data/de.fiducia.smartphone.android.banking.vr ]; then
-        echo "  - VR Banking"
-        $A pull /data/data/de.fiducia.smartphone.android.banking.vr ./
-    fi
-
-    popd # device_data
-
-    mkdir -p device_misc
-    pushd device_misc
-
-    $A pull /data/misc/. .
-
-    popd # device_misc
-
-    # test pulling apps
-
-    mkdir -p device_app
-    pushd device_app
-
-    $A pull /data/app/. .
-
-    popd # app_data
-
-    if $A shell /dev/busybox [ -d /data/unencrypted ]; then
-        mkdir -p unencrypted
-        pushd unencrypted
-
-        $A pull /data/unencrypted/. .
-
-        popd # unencrypted
-    fi
-fi
-
 cleanup
 
 startRuntime
