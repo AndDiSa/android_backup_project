@@ -10,7 +10,7 @@ curr_dir="$(dirname "$0")"
 set -e   # fail early
 
 SYSTEM_PATTERN=""
-if [[ "$1" == "-system" ]]; then shift; SYSTEM_PATTERN="/system/app\|/system/priv-app\|/system/product/app\|/system/product/priv-app\|/product/overlay" ; fi
+if [[ "$1" == "--system-apps" ]]; then shift; SYSTEM_PATTERN="/system/app\|/system/priv-app\|/system/product/app\|/system/product/priv-app\|/product/overlay" ; fi
 
 updateBusybox
 
