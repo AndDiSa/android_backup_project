@@ -52,8 +52,8 @@ for APP in `echo $PACKAGES | tr " " "\n" | grep "${PATTERN}"`; do
 #
 # --- version for magisk rooted
 #
-		$AS "'cd $appDir && /dev/busybox tar czf - ./ | base64' 2>/dev/null" | base64 -d | pv -trabi 1 > app_${dataDir}.tar.gz
-		$AS "'cd /data/data/$dataDir && /dev/busybox tar czf - ./ | base64' 2>/dev/null" | base64 -d | pv -trabi 1 > data_${dataDir}.tar.gz
+		$AS "'cd $appDir && /dev/busybox tar czf - ./' 2>/dev/null" | pv -trabi 1 > app_${dataDir}.tar.gz
+		$AS "'cd /data/data/$dataDir && /dev/busybox tar czf - ./' 2>/dev/null" | pv -trabi 1 > data_${dataDir}.tar.gz
 	else
 #
 # --- version for adb insecure
