@@ -47,7 +47,7 @@ else
 	echo "## Push all apps in $DIR: $APPS"
 fi
 
-echo "## Installng apps"
+echo "## Installing apps"
 for appPackage in $APPS
 do
 	APP=`tar xvfz $appPackage -C /tmp/ --wildcards "*.apk" | sed 's/\.\///'`
@@ -94,8 +94,11 @@ do
 	$A push $dataPackage /sdcard/
 	echo "mkdir -p /data/data/$dataDir"
 	$AS "mkdir -p /data/data/$dataDir"
-	$AS "/dev/busybox tar xfpz /sdcard/$dataPackage -C /data/data/$dataDir"
-	$AS "rm /sdcard/$dataPackage"
+        if [[ "$AS" == "$AMAGISK" ]]; then
+            cat $dataPackage | pv -trab | $AS "cd /data/data/$dataDir && /dev/busybox tar -xzpf -"
+        else
+            cat $dataPackage | pv -trab | $AS "/dev/busybox tar -xzpf - -C /data/data/$dataDir"
+        fi
 	$AS "chown -R $ID.$ID /data/data/$dataDir" || true
 done
 echo "script exiting after adb install will want to fix securelinux perms with: restorecon -FRDv /data/data"

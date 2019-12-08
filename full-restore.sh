@@ -91,12 +91,14 @@ fi
 
 if $media_backup; then
     echo "Restoring full tar backup of /data/media ... "
+    $AS mkdir -p /data/media
     if [[ "$AS" == "$AMAGISK" ]]; then
         cat data_media.tar.gz | pv -trab | $AS 'cd /data/media && /dev/busybox tar -xzpf - --exclude=./vendor/var/run' 
     else
         cat data_media.tar.gz | pv -trab | $AS '/dev/busybox tar -xzpf - -C /data/media --exclude=./vendor/var/run' 
     fi
     echo "Restoring full tar backup of /data/mediadrm ... "
+    $AS mkdir -p /data/mediadrm
     if [[ "$AS" == "$AMAGISK" ]]; then
         cat data_mediadrm.tar.gz | pv -trab | $AS 'cd /data/mediadrm && /dev/busybox tar -xzpf - --exclude=./vendor/var/run' 
     else
