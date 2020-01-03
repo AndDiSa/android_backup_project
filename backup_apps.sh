@@ -12,6 +12,8 @@ set -e   # fail early
 SYSTEM_PATTERN=""
 if [[ "$1" == "--system-apps" ]]; then shift; SYSTEM_PATTERN="/system/app\|/system/priv-app\|/system/product/app\|/system/product/priv-app\|/product/overlay" ; fi
 
+checkPrerequisites
+
 updateBusybox
 
 lookForAdbDevice

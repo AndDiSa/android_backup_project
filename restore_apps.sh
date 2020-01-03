@@ -29,6 +29,8 @@ if [[ ! -d "$DIR" ]]; then
 fi
 shift
 
+checkPrerequisites
+
 updateBusybox
 
 lookForAdbDevice

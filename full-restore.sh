@@ -65,6 +65,8 @@ else
     exit 1
 fi
 
+checkPrerequisites
+
 updateBusybox
 
 lookForAdbDevice

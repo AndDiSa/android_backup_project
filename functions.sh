@@ -23,6 +23,75 @@ function checkForCleanData()
 	fi
 }
 
+function checkPrerequisites()
+{
+	adb=`adb --version`
+        if [ $? -ne 0 ]; then
+                echo "adb not found, please install adb"
+                exit 1
+        fi
+
+	git=`git --version`
+        if [ $? -ne 0 ]; then
+                echo "git not found, please install git"
+                exit 1
+        fi
+
+	tar=`tar --help`
+        if [ $? -ne 0 ]; then
+                echo "tar not found, please install tar"
+                exit 1
+	fi 
+
+        wc=`wc --help`
+        if [ $? -ne 0 ]; then
+                echo "wc not found, please install wc"
+                exit 1
+        fi
+
+        tr=`tr --help`
+        if [ $? -ne 0 ]; then
+                echo "tr not found, please install tr"
+                exit 1
+        fi
+
+        sed=`sed --help`
+        if [ $? -ne 0 ]; then
+                echo "sed not found, please install sed"
+                exit 1
+        fi
+
+        rev=`rev --help`
+        if [ $? -ne 0 ]; then
+                echo "rev not found, please install rev"
+                exit 1
+        fi
+
+        cut=`cut --help`
+        if [ $? -ne 0 ]; then
+                echo "cut not found, please install cut"
+                exit 1
+        fi
+
+        gzip=`gzip --help`
+        if [ $? -ne 0 ]; then
+                echo "gzip not found, please install gzip"
+                exit 1
+        fi
+
+	pv=`pv -V`
+	if [ $? -ne 0 ]; then
+		echo "pv not found, please install pv"
+		exit 1
+	else
+		v=`echo $pv | head -n 1 | cut -d " " -f2`
+		if [ "$v" \< "1.6.6" ]; then
+			echo "$v of pv is lower than required version: 1.6.6"
+			exit 1
+		fi
+	fi
+}
+
 function checkRootType()
 {
 	echo "Checking for root access..."

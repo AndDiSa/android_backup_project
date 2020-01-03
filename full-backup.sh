@@ -53,6 +53,8 @@ if [[ $# -gt 0 ]]; then
     done
 fi
 
+checkPrerequisites
+
 updateBusybox
 
 lookForAdbDevice
