@@ -83,7 +83,7 @@ if $image_backup; then
     	device_checksum="$($AS /dev/busybox sha256sum $PARTITION | cut -d ' ' -f1)"
     	echo "$device_checksum"
     	echo -n "  Calculate checksum locally: "
-    	local_checksum="$(sha256sum $.img | cut -d ' ' -f1)"
+    	local_checksum="$(sha256sum $i.img | cut -d ' ' -f1)"
     	echo "$local_checksum"
 
     	if [ "$local_checksum" == "$device_checksum" ]; then
