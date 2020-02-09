@@ -60,8 +60,8 @@ for APP in `echo $PACKAGES | tr " " "\n" | grep "${PATTERN}"`; do
 #
 # --- version for adb insecure
 #
-       		$AS "/dev/busybox tar -cv -C $appDir . | gzip" | gzip -d | pv -trabi 1 | gzip -c9 > app_${dataDir}.tar.gz
-       		$AS "/dev/busybox tar -cv -C /data/data/$dataDir . | gzip" | gzip -d | pv -trabi 1 | gzip -c9 > data_${dataDir}.tar.gz
+       		$AS "/dev/busybox tar -cv -C $appDir . 2>/dev/null | gzip" | gzip -d | pv -trabi 1 | gzip -c9 > app_${dataDir}.tar.gz
+       		$AS "/dev/busybox tar -cv -C /data/data/$dataDir . 2>/dev/null | gzip" | gzip -d | pv -trabi 1 | gzip -c9 > data_${dataDir}.tar.gz
 	fi
 done
 

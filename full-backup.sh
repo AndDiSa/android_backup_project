@@ -85,8 +85,8 @@ if $media_backup; then
     	$AS '"cd /data/media && /dev/busybox tar -czf - ./ 2>/dev/null"' | pv -trabi 1 > data_media.tar.gz
     	$AS '"cd /data/mediadrm && /dev/busybox tar -czf - ./ 2>/dev/null"' | pv -trabi 1 > data_mediadrm.tar.gz
     else
-    	$AS '/dev/busybox tar -cv -C /data/media . | gzip' | gzip -d | pv -trabi 1 | gzip -c9 > data_media.tar.gz
-    	$AS '/dev/busybox tar -cv -C /data/mediadrm . | gzip' | gzip -d | pv -trabi 1 | gzip -c9 > data_mediadrm.tar.gz
+    	$AS '/dev/busybox tar -cv -C /data/media . 2>/dev/null | gzip' | gzip -d | pv -trabi 1 | gzip -c9 > data_media.tar.gz
+    	$AS '/dev/busybox tar -cv -C /data/mediadrm . 2>/dev/null | gzip' | gzip -d | pv -trabi 1 | gzip -c9 > data_mediadrm.tar.gz
     fi
 fi
 
@@ -94,7 +94,7 @@ if $image_backup; then
     echo "Creating image backup..."
     #get data image location
     PARTITION=$($AS mount | grep " /data " | cut -d ' ' -f1)
-    $AS "/dev/busybox dd if=$PARTITION bs=16777216 | gzip" | gzip -d | pv -trabi 1 | gzip -c9 > data.img.gz
+    $AS "/dev/busybox dd if=$PARTITION bs=16777216 2>/dev/null | gzip" | gzip -d | pv -trabi 1 | gzip -c9 > data.img.gz
 
     echo "Verifying image backup..."
     echo -n "  Calculate checksum on device: "
