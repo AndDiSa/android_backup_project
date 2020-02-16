@@ -89,7 +89,9 @@ if $data_backup; then
     else
         cat data.tar.gz | pv -trab | $AS '/dev/busybox tar -xzpf - -C /data --exclude=./vendor/var/run' 
     fi
+    $AS "restorecon -FRDv /data/data"
 fi
+
 
 if $media_backup; then
     echo "Restoring full tar backup of /data/media ... "
@@ -109,10 +111,12 @@ if $media_backup; then
 fi
 
 if $image_backup; then
-    echo "Resoring image backup not implemented yet ..."
+    echo "Restoring image backup..."
+    #get data image location
+    PARTITION=$($AS mount | grep " /data " | cut -d ' ' -f1)
+    echo "Restoring to $PARTITION"
+    zcat data.img.gz 2>/dev/null | pv -trab | $AS "/dev/busybox dd of=$PARTITION 2>/dev/null"
 fi
-
-$AS "restorecon -FRDv /data/data"
 
 cleanup
 
