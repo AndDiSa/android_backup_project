@@ -94,6 +94,7 @@ if $image_backup; then
     echo "Creating image backup..."
     #get data image location
     PARTITION=$($AS mount | grep " /data " | cut -d ' ' -f1)
+    echo "trying to get $PARTITION as data.img.gz"
     $AS "/dev/busybox dd if=$PARTITION bs=16777216 2>/dev/null | gzip" | gzip -d | pv -trabi 1 | gzip -c9 > data.img.gz
 
     echo "Verifying image backup..."
