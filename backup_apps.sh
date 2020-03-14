@@ -50,18 +50,18 @@ for APP in `echo $PACKAGES | tr " " "\n" | grep "${PATTERN}"`; do
 	echo $appDir
 	echo $dataDir
 
-        if [[ "$AS" == "$AMAGISK" ]]; then
-#
-# --- version for magisk rooted
-#
-		$AS "'cd $appDir && /dev/busybox tar czf - ./' 2>/dev/null" | pv -trabi 1 > app_${dataDir}.tar.gz
-		$AS "'cd /data/data/$dataDir && /dev/busybox tar czf - ./' 2>/dev/null" | pv -trabi 1 > data_${dataDir}.tar.gz
-	else
+        if [[ "$AS" == "$AROOT" ]]; then
 #
 # --- version for adb insecure
 #
        		$AS "/dev/busybox tar -cv -C $appDir . 2>/dev/null | gzip" | gzip -d | pv -trabi 1 | gzip -c9 > app_${dataDir}.tar.gz
        		$AS "/dev/busybox tar -cv -C /data/data/$dataDir . 2>/dev/null | gzip" | gzip -d | pv -trabi 1 | gzip -c9 > data_${dataDir}.tar.gz
+	else
+#
+# --- version for magisk rooted
+#
+		$AS "'cd $appDir && /dev/busybox tar czf - ./' 2>/dev/null" | pv -trabi 1 > app_${dataDir}.tar.gz
+		$AS "'cd /data/data/$dataDir && /dev/busybox tar czf - ./' 2>/dev/null" | pv -trabi 1 > data_${dataDir}.tar.gz
 	fi
 done
 

@@ -1,8 +1,9 @@
 #!/bin/bash
 
 A="adb"
-AMAGISK="adb shell su -c "      # -- needed for magisk rooted devices
-AROOT="adb shell su root " # -- needed for adb inscure devices
+AMAGISK="adb shell su root "      # -- needed for magisk rooted devices
+AMAGISK2="adb shell su -c "       # -- needed for magisk rooted devices (depends on su version installed)
+AROOT="adb shell "
 
 function cleanup()
 {
@@ -95,22 +96,29 @@ function checkPrerequisites()
 function checkRootType()
 {
 	echo "Checking for root access..."
-	if [[ $($AMAGISK whoami) == "root" ]]; then
-        	AS=$AMAGISK
+	echo "1) Requesting adbd as root..."
+	$A root
+	echo "Waiting for device..."
+	$A wait-for-any
+
+	result=`$AROOT whoami`
+	echo $result
+	if [[ "$result" == "root" ]]; then
+		AS=$AROOT
 	else
-        	if [[ $($AROOT whoami) == "root" ]]; then
-			AS=$AROOT
+		result=`$AMAGISK2 whoami`
+		echo $result
+        	if [[ "$result" == "root" ]]; then
+        		AS=$AMAGISK2
 		else
-			echo "Requesting root..."
-			$A root
-			echo "Waiting for device..."
-			$A wait-for-any
-		fi
-		if [[ $($AROOT whoami) == "root" ]]; then
-			AS=$AROOT
-		else
-			echo "Fianlly root is not available for this device, exiting execution."
-			exit 1
+			result=`$AMAGISK whoami`
+			echo $result
+	                if [[ "$result" == "root" ]]; then
+                        	AS=$AMAGISK
+			else
+				echo "Fianlly root is not available for this device, exiting execution."
+				exit 1
+			fi
 		fi
 	fi
 }

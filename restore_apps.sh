@@ -96,10 +96,10 @@ do
 	$A push $dataPackage /sdcard/
 	echo "mkdir -p /data/data/$dataDir"
 	$AS "mkdir -p /data/data/$dataDir"
-        if [[ "$AS" == "$AMAGISK" ]]; then
-            cat $dataPackage | pv -trab | $AS "cd /data/data/$dataDir && /dev/busybox tar -xzpf -"
-        else
+        if [[ "$AS" == "$AROOT" ]]; then
             cat $dataPackage | pv -trab | $AS "/dev/busybox tar -xzpf - -C /data/data/$dataDir"
+        else
+            cat $dataPackage | pv -trab | $AS "cd /data/data/$dataDir && /dev/busybox tar -xzpf -"
         fi
 	$AS "chown -R $ID.$ID /data/data/$dataDir" || true
 done

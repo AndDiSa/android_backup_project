@@ -72,21 +72,21 @@ stopRuntime
 
 if $data_backup; then
     echo "Creating full tar backup of /data excluding /data/media"
-    if [[ "$AS" == "$AMAGISK" ]]; then
-    	$AS '"cd /data && /dev/busybox tar -czf - --exclude=media --exclude=mediadrm ./ 2>/dev/null"' | pv -trabi 1 > data.tar.gz
-    else
+    if [[ "$AS" == "$AROOT" ]]; then
     	$AS '/dev/busybox tar -cv -C /data --exclude="/data/media" --exclude="/data/mediadrm" . | gzip' | gzip -d | pv -trabi 1 | gzip -c9 > data.tar.gz
+    else
+    	$AS '"cd /data && /dev/busybox tar -czf - --exclude=media --exclude=mediadrm ./ 2>/dev/null"' | pv -trabi 1 > data.tar.gz
     fi
 fi
 
 if $media_backup; then
     echo "Creating full tar backup of /data/media"
-    if [[ "$AS" == "$AMAGISK" ]]; then
-    	$AS '"cd /data/media && /dev/busybox tar -czf - ./ 2>/dev/null"' | pv -trabi 1 > data_media.tar.gz
-    	$AS '"cd /data/mediadrm && /dev/busybox tar -czf - ./ 2>/dev/null"' | pv -trabi 1 > data_mediadrm.tar.gz
-    else
+    if [[ "$AS" == "$AROOT" ]]; then
     	$AS '/dev/busybox tar -cv -C /data/media . 2>/dev/null | gzip' | gzip -d | pv -trabi 1 | gzip -c9 > data_media.tar.gz
     	$AS '/dev/busybox tar -cv -C /data/mediadrm . 2>/dev/null | gzip' | gzip -d | pv -trabi 1 | gzip -c9 > data_mediadrm.tar.gz
+    else
+    	$AS '"cd /data/media && /dev/busybox tar -czf - ./ 2>/dev/null"' | pv -trabi 1 > data_media.tar.gz
+    	$AS '"cd /data/mediadrm && /dev/busybox tar -czf - ./ 2>/dev/null"' | pv -trabi 1 > data_mediadrm.tar.gz
     fi
 fi
 

@@ -84,10 +84,10 @@ pushd $RESTOREDIR
 
 if $data_backup; then
     echo "Restoring full tar backup of /data excluding /data/media ... "
-    if [[ "$AS" == "$AMAGISK" ]]; then
-        cat data.tar.gz | pv -trab | $AS 'cd /data && /dev/busybox tar -xzpf - --exclude=./vendor/var/run' 
-    else
+    if [[ "$AS" == "$AROOT" ]]; then
         cat data.tar.gz | pv -trab | $AS '/dev/busybox tar -xzpf - -C /data --exclude=./vendor/var/run' 
+    else
+        cat data.tar.gz | pv -trab | $AS 'cd /data && /dev/busybox tar -xzpf - --exclude=./vendor/var/run' 
     fi
     $AS "restorecon -FRDv /data/data"
 fi
@@ -96,17 +96,17 @@ fi
 if $media_backup; then
     echo "Restoring full tar backup of /data/media ... "
     $AS mkdir -p /data/media
-    if [[ "$AS" == "$AMAGISK" ]]; then
-        cat data_media.tar.gz | pv -trab | $AS 'cd /data/media && /dev/busybox tar -xzpf - --exclude=./vendor/var/run' 
-    else
+    if [[ "$AS" == "$AROOT" ]]; then
         cat data_media.tar.gz | pv -trab | $AS '/dev/busybox tar -xzpf - -C /data/media --exclude=./vendor/var/run' 
+    else
+        cat data_media.tar.gz | pv -trab | $AS 'cd /data/media && /dev/busybox tar -xzpf - --exclude=./vendor/var/run' 
     fi
     echo "Restoring full tar backup of /data/mediadrm ... "
     $AS mkdir -p /data/mediadrm
-    if [[ "$AS" == "$AMAGISK" ]]; then
-        cat data_mediadrm.tar.gz | pv -trab | $AS 'cd /data/mediadrm && /dev/busybox tar -xzpf - --exclude=./vendor/var/run' 
-    else
+    if [[ "$AS" == "$AROOT" ]]; then
         cat data_mediadrm.tar.gz | pv -trab | $AS '/dev/busybox tar -xzpf - -C /data/mediadrm --exclude=./vendor/var/run' 
+    else
+        cat data_mediadrm.tar.gz | pv -trab | $AS 'cd /data/mediadrm && /dev/busybox tar -xzpf - --exclude=./vendor/var/run' 
     fi
 fi
 
