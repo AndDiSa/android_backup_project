@@ -2,7 +2,8 @@
 
 A="adb"
 AMAGISK="adb shell su root "      # -- needed for magisk rooted devices
-AMAGISK2="adb shell su -c "       # -- needed for magisk rooted devices (depends on su version installed)
+AMAGISK2="adb shell su 0 -c "     # -- needed for magisk rooted devices (depends on su version installed)
+AMAGISK3="adb shell su -c "       # -- needed for magisk rooted devices (depends on su version installed)
 AROOT="adb shell "
 
 function cleanup()
@@ -106,18 +107,25 @@ function checkRootType()
 	if [[ "$result" == "root" ]]; then
 		AS=$AROOT
 	else
-		result=`$AMAGISK2 whoami`
+		result=`$AMAGISK3 whoami`
 		echo $result
         	if [[ "$result" == "root" ]]; then
-        		AS=$AMAGISK2
+        		AS=$AMAGISK3
 		else
-			result=`$AMAGISK whoami`
+
+			result=`$AMAGISK2 whoami`
 			echo $result
-	                if [[ "$result" == "root" ]]; then
-                        	AS=$AMAGISK
+        		if [[ "$result" == "root" ]]; then
+        			AS=$AMAGISK2
 			else
-				echo "Fianlly root is not available for this device, exiting execution."
-				exit 1
+				result=`$AMAGISK whoami`
+				echo $result
+	                	if [[ "$result" == "root" ]]; then
+                        		AS=$AMAGISK
+				else
+					echo "Fianlly root is not available for this device, exiting execution."
+					exit 1
+				fi
 			fi
 		fi
 	fi
