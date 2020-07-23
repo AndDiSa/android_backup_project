@@ -100,7 +100,7 @@ function checkRootType()
 	echo "1) Requesting adbd as root..."
 	$A root
 	echo "Waiting for device..."
-	$A wait-for-any
+	$A wait-for-any-device
 
 	result=`$AROOT whoami`
 	echo $result
@@ -134,7 +134,7 @@ function checkRootType()
 function lookForAdbDevice()
 {
 	echo "Waiting for device..."
-	$A wait-for-any
+	$A wait-for-any-device
 
 	echo "Devices detected:"
 	$A devices
