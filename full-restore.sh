@@ -84,11 +84,7 @@ pushd $RESTOREDIR
 
 if $data_backup; then
     echo "Restoring full tar backup of /data excluding /data/media ... "
-    if [[ "$AS" == "$AROOT" ]]; then
-        cat data.tar.gz | pv -trab | $AS '/dev/busybox tar -xzpf - -C /data --exclude=./vendor/var/run' 
-    else
-        cat data.tar.gz | pv -trab | $AS 'cd /data && /dev/busybox tar -xzpf - --exclude=./vendor/var/run' 
-    fi
+    cat data.tar.gz | pv -trab | $AS '/dev/busybox tar -xzpf - -C /data --exclude=./vendor/var/run || true' 
     $AS "restorecon -FRDv /data/data"
 fi
 
@@ -96,18 +92,10 @@ fi
 if $media_backup; then
     echo "Restoring full tar backup of /data/media ... "
     $AS mkdir -p /data/media
-    if [[ "$AS" == "$AROOT" ]]; then
-        cat data_media.tar.gz | pv -trab | $AS '/dev/busybox tar -xzpf - -C /data/media --exclude=./vendor/var/run' 
-    else
-        cat data_media.tar.gz | pv -trab | $AS 'cd /data/media && /dev/busybox tar -xzpf - --exclude=./vendor/var/run' 
-    fi
+    cat data_media.tar.gz | pv -trab | $AS '/dev/busybox tar -xzpf - -C /data/media --exclude=./vendor/var/run || true' 
     echo "Restoring full tar backup of /data/mediadrm ... "
     $AS mkdir -p /data/mediadrm
-    if [[ "$AS" == "$AROOT" ]]; then
-        cat data_mediadrm.tar.gz | pv -trab | $AS '/dev/busybox tar -xzpf - -C /data/mediadrm --exclude=./vendor/var/run' 
-    else
-        cat data_mediadrm.tar.gz | pv -trab | $AS 'cd /data/mediadrm && /dev/busybox tar -xzpf - --exclude=./vendor/var/run' 
-    fi
+    cat data_mediadrm.tar.gz | pv -trab | $AS '/dev/busybox tar -xzpf - -C /data/mediadrm --exclude=./vendor/var/run || true' 
 fi
 
 if $image_backup; then
@@ -115,7 +103,7 @@ if $image_backup; then
     #get data image location
     PARTITION=$($AS mount | grep " /data " | cut -d ' ' -f1)
     echo "Restoring to $PARTITION"
-    zcat data.img.gz 2>/dev/null | pv -trab | $AS "/dev/busybox dd of=$PARTITION 2>/dev/null"
+    zcat data.img.gz 2>/dev/null | pv -trab | $AS "/dev/busybox dd of=$PARTITION 2>/dev/null || true"
 fi
 
 cleanup
