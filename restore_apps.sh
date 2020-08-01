@@ -93,15 +93,17 @@ do
 	echo "APP User id is $ID"
 
 	dataPackage=`echo $appPackage | sed 's/app_/data_/'`
+	echo "mkdir -p /dev/tmp/$dataDir"
+	$AS "mkdir -p /dev/tmp/$dataDir"
 	$A push $dataPackage /sdcard/
-	echo "mkdir -p /data/data/$dataDir"
-	$AS "mkdir -p /data/data/$dataDir"
-        if [[ "$AS" == "$AROOT" ]]; then
-            cat $dataPackage | pv -trab | $AS "/dev/busybox tar -xzpf - -C /data/data/$dataDir"
-        else
-            cat $dataPackage | pv -trab | $AS "cd /data/data/$dataDir && /dev/busybox tar -xzpf -"
-        fi
-	$AS "chown -R $ID.$ID /data/data/$dataDir" || true
+ 	$AS "mv /sdcard/$dataPackage /dev/tmp/$dataDir/"
+	$AS "/dev/busybox tar -xzvf /dev/tmp/$dataDir/$dataPackage -C /dev/tmp/$dataDir" 
+ 	$AS "rm /dev/tmp/$dataDir/$dataPackage" 
+ 	$AS "rm -r /data/data/$dataDir" 
+	$AS "cp -ar /dev/tmp/$dataDir /data/data/$dataDir" 
+	echo "$AS chown -R $ID.$ID /data/data/$dataDir"
+	$AS "chown -R $ID.$ID /data/data/$dataDir"
+	$AS "rm -r /dev/tmp/$dataDir" 
 done
 echo "script exiting after adb install will want to fix securelinux perms with: restorecon -FRDv /data/data"
 $AS "restorecon -FRDv /data/data"
