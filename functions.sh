@@ -164,7 +164,7 @@ function pushBusybox()
 		aarch64|arm64|armv8|armv8a)
 			target_arch=arm64
 			;;
-		aarch32|arm32|arm|armv7|armv7a|armv7l|arm-neon|armv7a-neon|aarch|ARM)
+		aarch32|arm32|arm|armv7|armv7a|armv7l|armv8l|arm-neon|armv7a-neon|aarch|ARM)
 			target_arch=arm
 			;;
 		mips|MIPS|mips32|arch-mips32)
