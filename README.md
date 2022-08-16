@@ -1,6 +1,6 @@
 # android-backup-project
 
-The android backup project provides a set of scripts anf tools to
+The android backup project provides a set of scripts and tools to
 backup and/or restore applications installed on Android devices.
 
 This is **not** adb backup which didn't work for my requirements as
@@ -67,7 +67,7 @@ and the current date.
 
 ./restore_apps.sh [<directory_name>]
 
-Ths script restores the apps and their data of a previous backup created by
+This script restores the apps and their data of a previous backup created by
 backup_apps.sh
 Either the directory is identified automatically by the device connected and the
 current date or you can pass a directory name as parameter. In that case **all**
@@ -116,7 +116,7 @@ directory from where the backup shall be restored.
 
 **Important**
 
-Be **very** careful in unsing this method, especially when you are restoring /data 
+Be **very** careful in using this method, especially when you are restoring /data 
 It will overwrite everything on the /data partition and this may cause major issues
 up to the point that your device becomes no longer usable. In that case you probably
 need to do a full wipe to get it working again.
