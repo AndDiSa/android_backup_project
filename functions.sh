@@ -81,14 +81,14 @@ function checkPrerequisites()
                 exit 1
         fi
 
-	pv=`pv -V`
+	pv_required="1.6.6"
+ 	pv_current=`pv -V | head -n 1 | cut -d " " -f2`
 	if [ $? -ne 0 ]; then
 		echo "pv not found, please install pv"
 		exit 1
 	else
-		v=`echo $pv | head -n 1 | cut -d " " -f2`
-		if [ "$v" \< "1.6.6" ]; then
-			echo "$v of pv is lower than required version: 1.6.6"
+		if [ "$(printf '%s\n' "$pv_required" "$pv_current" | sort -V | head -n1)" != "$pv_required" ]; then
+                	echo "current version $pv_current of pv is lower than required version: $pv_required"
 			exit 1
 		fi
 	fi
