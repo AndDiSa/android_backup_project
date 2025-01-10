@@ -48,6 +48,7 @@ a complete workover so that I decided to start over from scratch :-)
 
 * adb installed and in execution path
 * Ubuntu Linux (other should work, too)
+* package ``pv`` installed: ```sudo apt install -y pv```
 
 
 ## Usage
