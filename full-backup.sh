@@ -73,9 +73,9 @@ stopRuntime
 if $data_backup; then
     echo "Creating full tar backup of /data excluding /data/media"
     if [[ "$AS" == "$AROOT" ]]; then
-    	$AS '/dev/busybox tar -cv -C /data --exclude="./media" --exclude="./mediadrm" . | gzip' | gzip -d | pv -trabi 1 | gzip -c9 > data.tar.gz
+    	$AS '/dev/busybox tar -cv -C /data --exclude="./media" --exclude="./mediadrm" --exclude="./user/0" . | gzip' | gzip -d | pv -trabi 1 | gzip -c9 > data.tar.gz
     else
-    	$AS '"cd /data && /dev/busybox tar -czf - --exclude="./media" --exclude="./mediadrm" ./ 2>/dev/null"' | pv -trabi 1 > data.tar.gz
+    	$AS '"cd /data && /dev/busybox tar -czf - --exclude="./media" --exclude="./mediadrm" --exclude="./user/0" ./ 2>/dev/null"' | pv -trabi 1 > data.tar.gz
     fi
 fi
 
