@@ -88,6 +88,19 @@ google play or apps that sadly decide to prevent backups of their (i.e. your)
 data.
 
 
+### restore_splitted_apps.sh
+
+./restore_splitted_apps.sh [<directory_name>]
+
+This script works like restore_apps.sh but uses a different installation method.
+Restoring with pm install / pm install-multiple sometimes leads to a hanging
+process (especially when there is a multi-apk application ist to be restored).
+In those cases the whole restoring is blocked and you can only kill the process
+so that restoring fails.
+
+This script uses a transaction based installation method for restoring.
+
+
 ### full-backup.sh
 
 ./full-backup.sh [--data-backup][--no-data-backup][--media-backup][--no-media-backup][--image-backup][--no-image-backup]
