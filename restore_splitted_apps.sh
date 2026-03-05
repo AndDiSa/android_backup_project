@@ -48,43 +48,44 @@ else
 	echo "## Push all apps in $DIR: $APPS"
 fi
 
+TEMP_DIR=/tmp/
+error=0
 for appPackage in $APPS
 do
         # Create a temporary directory
-        temp_dir="/tmp/apkinstaller-$(date +%s)"
+        temp_dir="${TEMP_DIR}/apkinstaller-$(date +%s)"
         mkdir -p "$temp_dir"
         if [ $? -ne 0 ]; then
             echo "Failed to create temporary directory."
-            exit 1
-        else
-            echo "$temp_dir"
+            error=1
+            continue
         fi
 
-        # Extract the tar file into the temporary directory
+        # Extract the tar file of the app into the temporary directory
 	APP=`tar xvfz $appPackage -C $temp_dir --wildcards "*.apk" | sed 's/\.\///'`
-	echo $appPackage
-	echo $APP
+
         # Check if the tar file exists
         tar_file="$appPackage"
         if [ ! -f "$tar_file" ]; then
             echo "The specified tar file does not exist."
             rm -rf "$temp_dir"
-            exit 1
+            error=1
+            continue
         fi
 
-        # Initialize total size and APK list
+        # Initialize total size of APKs
         total_size=$(($(find "$temp_dir" -type f -name "*.apk" -printf '%s+')0))
-        echo "Total size: $total_size bytes"
 
         # Create a new installation session with the calculated total size
-        create_cmd="adb shell pm install-create -S ${total_size}"
+        create_cmd="pm install-create -S ${total_size}"
         echo "Executing: $create_cmd"
-        session=$($create_cmd)
+        session=$($AS $create_cmd)
         read session_id <<<${session//[^0-9]/ }
         if [ $? -ne 0 ]; then
             echo "Failed to create installation session."
             rm -rf "$temp_dir"
-            exit 1
+            error=1
+            continue
         fi
         echo "session_id=$session_id"
 
@@ -94,24 +95,26 @@ do
             size=$(stat --format="%s" "$file_path")
     
             echo "Installing APK: $file_path with expected size $size"
-            cat "$file_path" |adb shell pm install-write -S ${size} ${session_id} ${index}
+            cat "$file_path" |$AS pm install-write -S ${size} ${session_id} ${index}
             status=$?
             if [ $status -ne 0 ]; then
                 echo "Error during installation of APK: $file_path"
                 rm -rf "$temp_dir"
-                exit 1
+                error=1
+                continue
             fi
             index=$((index + 1))
         done
 
         # Commit the session to complete the installation
-        commit_cmd="adb shell pm install-commit ${session_id}"
+        commit_cmd="pm install-commit ${session_id}"
         echo "Executing: $commit_msg"
-        $commit_cmd
+        $AS $commit_cmd
         if [ $? -ne 0 ]; then
             echo "Failed to commit installation."
             rm -rf "$temp_dir"
-            exit 1
+            error=1
+            continue
         fi
 
         # Clean up the temporary directory
@@ -138,7 +141,8 @@ do
 
 	if [[ -z $ID ]]; then
 	    echo "Error: $APP still not installed"
-	    exit 2
+            error=1
+	    continue
 	fi
 
 	echo "APP User id is $ID"
@@ -153,5 +157,7 @@ done
 echo "script exiting after adb install will want to fix securelinux perms with: restorecon -FRDv /data/data"
 $AS "restorecon -FRDv /data/data"
 cleanup
-
+if [ $error -ne 0 ]; then
+    echo "restore could not be finished without errors"
+fi
 exit 0
