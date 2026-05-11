@@ -81,7 +81,9 @@ do
         echo "Executing: $create_cmd"
         session=$($AS $create_cmd)
         read session_id <<<${session//[^0-9]/ }
-        if [ $? -ne 0 ]; then
+        
+        # Check if session creation failed or if session_id is empty
+        if [ $? -ne 0 ] || [ -z "$session_id" ]; then
             echo "Failed to create installation session."
             rm -rf "$temp_dir"
             error=1
@@ -89,26 +91,52 @@ do
         fi
         echo "session_id=$session_id"
 
-        # Write each APK into the session in order
+        # Initialize variables
         index=0
-        find "$temp_dir" -name "*.apk" -print0 | while read -d '' file_path; do
+        error=0
+
+        # Write each APK into the session in order
+        # FIX 1: Use Process Substitution `< <()` to prevent the subshell trap
+        while IFS= read -r -d '' file_path; do
             size=$(stat --format="%s" "$file_path")
-    
+            
             echo "Installing APK: $file_path with expected size $size"
-            cat "$file_path" |$AS pm install-write -S ${size} ${session_id} ${index}
+            
+            # FIX 2: Stream bytes from Host to Device using Input Redirection (<)
+            # Notice the '<' at the start and the '-' at the very end
+            < "$file_path" $AS pm install-write -S ${size} ${session_id} ${index} -
+            
             status=$?
             if [ $status -ne 0 ]; then
                 echo "Error during installation of APK: $file_path"
-                rm -rf "$temp_dir"
                 error=1
-                continue
+                break # Break the loop immediately so we don't keep trying to send broken streams
             fi
             index=$((index + 1))
-        done
+        done < <(find "$temp_dir" -name "*.apk" -print0)
+
+        # FIX 3: Catch the error outside the loop and abandon the session cleanly
+        if [ "$error" -eq 1 ]; then
+            echo "Abandoning session ${session_id} due to write errors."
+            $AS pm install-abandon ${session_id}
+            rm -rf "$temp_dir"
+            continue
+        fi
 
         # Commit the session to complete the installation
         commit_cmd="pm install-commit ${session_id}"
-        echo "Executing: $commit_msg"
+        echo "Executing: $commit_cmd"
+        $AS $commit_cmd
+        if [ $? -ne 0 ]; then
+            echo "Failed to commit installation."
+            rm -rf "$temp_dir"
+            error=1
+            continue
+        fi
+
+        # Commit the session to complete the installation
+        commit_cmd="pm install-commit ${session_id}"
+        echo "Executing: $commit_cmd"
         $AS $commit_cmd
         if [ $? -ne 0 ]; then
             echo "Failed to commit installation."
