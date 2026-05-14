@@ -95,7 +95,8 @@ do
     # Write each APK into the session in order
     index=0
     error=0
-    while IFS= read -r -d '' file_path; do
+    # Use dedicated file descriptor 3 to prevent adb from consuming the file list
+    while IFS= read -r -d '' file_path <&3; do
         size=$(stat --format="%s" "$file_path")
 
         echo "Installing APK: $file_path with expected size $size"
@@ -107,7 +108,7 @@ do
             break
         fi
         index=$((index + 1))
-    done < <(find "$temp_dir" -name "*.apk" -print0)
+    done 3< <(find "$temp_dir" -name "*.apk" -print0)
 
     if [ "$error" -eq 1 ]; then
         echo "Abandoning session ${session_id} due to write errors."
