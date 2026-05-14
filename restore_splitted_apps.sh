@@ -4,11 +4,10 @@
 # writes each APK into the session with its specific size, and commits the session.
 
 curr_dir="$(dirname "$0")"
+# shellcheck source=functions.sh
 . "$curr_dir/functions.sh"
 
 set -e   # fail early
-
-OLDIFS="$IFS"
 
 cat <<EOF
 WARNING: restoring random system apps is quite likely to make things worse
@@ -22,7 +21,7 @@ sleep 5
 DIR="$1"
 
 if [[ ! -d "$DIR" ]]; then
-	echo "Usage: $0 <data-dir>"
+	echo "Usage: $0 <data-dir> [apps...]"
 	echo "Must be created with ./backup_apps.sh"
 	exit 2
 fi
@@ -38,154 +37,131 @@ checkRootType
 
 pushBusybox
 
-cd $DIR
+# Create a local temporary directory for APK extraction
+LOCAL_TEMP=$(mktemp -d)
+function cleanup_local() {
+    rm -rf "$LOCAL_TEMP"
+    cleanup
+}
+trap cleanup_local EXIT
+
+pushd "$DIR" > /dev/null
 
 if [ $# -gt 0 ]; then
-	APPS="$@"
+	APPS="$*"
 	echo "## Push apps: $APPS"
 else
 	APPS=$(echo app_*)
 	echo "## Push all apps in $DIR: $APPS"
 fi
 
-TEMP_DIR=/tmp/
-error=0
+overall_error=0
 for appPackage in $APPS
 do
-        # Create a temporary directory
-        temp_dir="${TEMP_DIR}/apkinstaller-$(date +%s)"
-        mkdir -p "$temp_dir"
-        if [ $? -ne 0 ]; then
-            echo "Failed to create temporary directory."
-            error=1
-            continue
-        fi
+    [[ ! -f "$appPackage" ]] && continue
+    echo "--- Restoring: $appPackage ---"
 
-        # Extract the tar file of the app into the temporary directory
-	APP=`tar xvfz $appPackage -C $temp_dir --wildcards "*.apk" | sed 's/\.\///'`
+    # Create a sub-temp directory for this specific app
+    temp_dir="${LOCAL_TEMP}/apkinstaller-$(date +%s)"
+    mkdir -p "$temp_dir"
 
-        # Check if the tar file exists
-        tar_file="$appPackage"
-        if [ ! -f "$tar_file" ]; then
-            echo "The specified tar file does not exist."
-            rm -rf "$temp_dir"
-            error=1
-            continue
-        fi
+    # Extract the tar file of the app into the temporary directory
+    tar xvfz "$appPackage" -C "$temp_dir" --wildcards "*.apk" > /dev/null
 
-        # Initialize total size of APKs
-        total_size=$(($(find "$temp_dir" -type f -name "*.apk" -printf '%s+')0))
+    # Initialize total size of APKs
+    total_size=$(find "$temp_dir" -type f -name "*.apk" -printf '%s+')
+    total_size=$(echo "${total_size}0" | bc)
 
-        # Create a new installation session with the calculated total size
-        create_cmd="pm install-create -S ${total_size}"
-        echo "Executing: $create_cmd"
-        session=$($AS $create_cmd)
-        read session_id <<<${session//[^0-9]/ }
-        
-        # Check if session creation failed or if session_id is empty
-        if [ $? -ne 0 ] || [ -z "$session_id" ]; then
-            echo "Failed to create installation session."
-            rm -rf "$temp_dir"
-            error=1
-            continue
-        fi
-        echo "session_id=$session_id"
-
-        # Initialize variables
-        index=0
-        error=0
-
-        # Write each APK into the session in order
-        # FIX 1: Use Process Substitution `< <()` to prevent the subshell trap
-        while IFS= read -r -d '' file_path; do
-            size=$(stat --format="%s" "$file_path")
-            
-            echo "Installing APK: $file_path with expected size $size"
-            
-            # FIX 2: Stream bytes from Host to Device using Input Redirection (<)
-            # Notice the '<' at the start and the '-' at the very end
-            < "$file_path" $AS pm install-write -S ${size} ${session_id} ${index} -
-            
-            status=$?
-            if [ $status -ne 0 ]; then
-                echo "Error during installation of APK: $file_path"
-                error=1
-                break # Break the loop immediately so we don't keep trying to send broken streams
-            fi
-            index=$((index + 1))
-        done < <(find "$temp_dir" -name "*.apk" -print0)
-
-        # FIX 3: Catch the error outside the loop and abandon the session cleanly
-        if [ "$error" -eq 1 ]; then
-            echo "Abandoning session ${session_id} due to write errors."
-            $AS pm install-abandon ${session_id}
-            rm -rf "$temp_dir"
-            continue
-        fi
-
-        # Commit the session to complete the installation
-        commit_cmd="pm install-commit ${session_id}"
-        echo "Executing: $commit_cmd"
-        $AS $commit_cmd
-        if [ $? -ne 0 ]; then
-            echo "Failed to commit installation."
-            rm -rf "$temp_dir"
-            error=1
-            continue
-        fi
-
-        # Commit the session to complete the installation
-        commit_cmd="pm install-commit ${session_id}"
-        echo "Executing: $commit_cmd"
-        $AS $commit_cmd
-        if [ $? -ne 0 ]; then
-            echo "Failed to commit installation."
-            rm -rf "$temp_dir"
-            error=1
-            continue
-        fi
-
-        # Clean up the temporary directory
-        echo "Cleaning up temporary files..."
+    if [ "$total_size" -eq 0 ]; then
+        echo "No APKs found in $appPackage"
         rm -rf "$temp_dir"
+        continue
+    fi
 
-        appPrefix=$(echo $appPackage | sed 's/app_//' | sed 's/\.tar\.gz//')
+    # Create a new installation session with the calculated total size
+    create_cmd="pm install-create -S ${total_size}"
+    echo "Executing: $create_cmd"
+    session=$($AS "$create_cmd")
+    session_id=$(echo "$session" | grep -o '[0-9]\+')
 
-	echo $appPrefix
-	dataDir=$appPrefix
-	echo $dataDir
+    if [ -z "$session_id" ]; then
+        echo "Failed to create installation session. Output: $session"
+        rm -rf "$temp_dir"
+        overall_error=1
+        continue
+    fi
+    echo "session_id=$session_id"
 
-	echo
-	echo "## Now installing app data"
-	$AS "pm clear $appPrefix"
-	sleep 1
+    # Write each APK into the session in order
+    index=0
+    error=0
+    while IFS= read -r -d '' file_path; do
+        size=$(stat --format="%s" "$file_path")
 
-	echo "Attempting to restore data for $APP"
-	# figure out current app user id
-	L=( $($AS ls -d -l /data/data/$dataDir 2>/dev/null) ) || :
-	# drwx------ 10 u0_a240 u0_a240 4096 2017-12-10 13:45 .
-	# => return u0_a240
-	ID=${L[2]}
+        echo "Installing APK: $file_path with expected size $size"
 
-	if [[ -z $ID ]]; then
-	    echo "Error: $APP still not installed"
+        # Stream bytes from Host to Device using Input Redirection (<)
+        if ! < "$file_path" $AS "pm install-write -S ${size} ${session_id} ${index} -"; then
+            echo "Error during installation of APK: $file_path"
             error=1
-	    continue
-	fi
+            break
+        fi
+        index=$((index + 1))
+    done < <(find "$temp_dir" -name "*.apk" -print0)
 
-	echo "APP User id is $ID"
+    if [ "$error" -eq 1 ]; then
+        echo "Abandoning session ${session_id} due to write errors."
+        $AS "pm install-abandon ${session_id}"
+        rm -rf "$temp_dir"
+        overall_error=1
+        continue
+    fi
 
-	dataPackage=`echo $appPackage | sed 's/app_/data_/'`
-	echo "mkdir -p /dev/tmp/$dataDir"
-	$AS "mkdir -p /dev/tmp/$dataDir"
-	cat $dataPackage | pv -trab | $AS "/dev/busybox tar -xzpf - -C /data/data/$dataDir"
-	echo "$AS chown -R $ID.$ID /data/data/$dataDir"
-	$AS "chown -R $ID.$ID /data/data/$dataDir"
+    # Commit the session to complete the installation
+    echo "Committing session ${session_id}..."
+    if ! $AS "pm install-commit ${session_id}"; then
+        echo "Failed to commit installation."
+        rm -rf "$temp_dir"
+        overall_error=1
+        continue
+    fi
+
+    # Clean up the temporary directory
+    rm -rf "$temp_dir"
+
+    appPrefix=$(echo "$appPackage" | sed 's/app_//' | sed 's/\.tar\.gz//')
+    dataDir=$appPrefix
+
+    echo "## Now installing app data"
+    $AS "pm clear $appPrefix"
+    sleep 1
+
+    # figure out current app user id
+    L=( $($AS ls -d -l "/data/data/$dataDir" 2>/dev/null) ) || :
+    ID=${L[2]}
+
+    if [[ -z "$ID" ]]; then
+        echo "Error: $appPrefix still not installed or data dir not created"
+        overall_error=1
+        continue
+    fi
+
+    echo "APP User id is $ID"
+
+    dataPackage=$(echo "$appPackage" | sed 's/app_/data_/')
+    if [[ -f "$dataPackage" ]]; then
+        cat "$dataPackage" | pv -trab | $AS "/dev/busybox tar -xzpf - -C /data/data/$dataDir"
+        $AS "chown -R $ID.$ID /data/data/$dataDir"
+    fi
 done
-echo "script exiting after adb install will want to fix securelinux perms with: restorecon -FRDv /data/data"
+
+echo "Fixing SELinux permissions..."
 $AS "restorecon -FRDv /data/data"
-cleanup
-if [ $error -ne 0 ]; then
-    echo "restore could not be finished without errors"
+
+popd > /dev/null
+
+if [ $overall_error -ne 0 ]; then
+    echo "Restore completed with some errors."
+    exit 1
 fi
 exit 0

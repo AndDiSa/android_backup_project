@@ -5,11 +5,10 @@
 # improved / completly reworked to play nice with Android 9 / 10 by anddisa@gmail.com 2019/12
 
 curr_dir="$(dirname "$0")"
+# shellcheck source=functions.sh
 . "$curr_dir/functions.sh"
 
 set -e   # fail early
-
-OLDIFS="$IFS"
 
 cat <<EOF
 WARNING: restoring random system apps is quite likely to make things worse
@@ -23,7 +22,7 @@ sleep 5
 DIR="$1"
 
 if [[ ! -d "$DIR" ]]; then
-	echo "Usage: $0 <data-dir>"
+	echo "Usage: $0 <data-dir> [apps...]"
 	echo "Must be created with ./backup_apps.sh"
 	exit 2
 fi
@@ -39,10 +38,18 @@ checkRootType
 
 pushBusybox
 
-cd $DIR
+# Create a local temporary directory for APK extraction
+LOCAL_TEMP=$(mktemp -d)
+function cleanup_local() {
+    rm -rf "$LOCAL_TEMP"
+    cleanup
+}
+trap cleanup_local EXIT
+
+pushd "$DIR" > /dev/null
 
 if [ $# -gt 0 ]; then
-	APPS="$@"
+	APPS="$*"
 	echo "## Push apps: $APPS"
 else
 	APPS=$(echo app_*)
@@ -52,54 +59,61 @@ fi
 echo "## Installing apps"
 for appPackage in $APPS
 do
-	APP=`tar xvfz $appPackage -C /tmp/ --wildcards "*.apk" | sed 's/\.\///'`
-	echo $appPackage
-	echo $APP
-	echo "Installing $APP"
-	pushd /tmp
-	error=`$A install-multiple --no-streaming -r -t ${APP}`
-	echo "error=$error"
-	rm *.apk
-	popd
+    [[ ! -f "$appPackage" ]] && continue
 
-	appPrefix=$(echo $appPackage | sed 's/app_//' | sed 's/\.tar\.gz//')
-	echo $appPrefix
-	allApps=`$A shell cmd package list packages -f`
-	#echo $allApps
-	appConfig=$(echo $allApps | tr " " "\n" | grep $appPrefix)
-	echo "$appConfig"
+    echo "--- Restoring: $appPackage ---"
 
-	#dataDir=`echo $appConfig | sed 's/package://' | rev | cut -d "=" -f1 | rev`
+    # Extract APKs to local temp
+    tar xvfz "$appPackage" -C "$LOCAL_TEMP" --wildcards "*.apk" | sed 's/\.\///'
+
+    # Find all extracted APKs
+    mapfile -t EXTRACTED_APKS < <(find "$LOCAL_TEMP" -maxdepth 1 -name "*.apk")
+
+    if [ ${#EXTRACTED_APKS[@]} -eq 0 ]; then
+        echo "No APK found in $appPackage"
+        continue
+    fi
+
+	echo "Installing ${EXTRACTED_APKS[*]}"
+    # install-multiple handles one or more APKs
+	$A install-multiple -r -t "${EXTRACTED_APKS[@]}"
+	rm -f "$LOCAL_TEMP"/*.apk
+
+	appPrefix=$(echo "$appPackage" | sed 's/app_//' | sed 's/\.tar\.gz//')
+	echo "Package Name: $appPrefix"
+
 	dataDir=$appPrefix
-	echo $dataDir
 
-	echo
 	echo "## Now installing app data"
 	$AS "pm clear $appPrefix"
 	sleep 1
 
-	echo "Attempting to restore data for $APP"
+	echo "Attempting to restore data for $appPrefix"
 	# figure out current app user id
-	L=( $($AS ls -d -l /data/data/$dataDir 2>/dev/null) ) || :
+	L=( $($AS ls -d -l "/data/data/$dataDir" 2>/dev/null) ) || :
 	# drwx------ 10 u0_a240 u0_a240 4096 2017-12-10 13:45 .
 	# => return u0_a240
 	ID=${L[2]}
 
 	if [[ -z $ID ]]; then
-	    echo "Error: $APP still not installed"
-	    exit 2
+	    echo "Error: $appPrefix still not installed or data dir not created"
+	    continue
 	fi
 
 	echo "APP User id is $ID"
 
-	dataPackage=`echo $appPackage | sed 's/app_/data_/'`
-	echo "mkdir -p /dev/tmp/$dataDir"
-	$AS "mkdir -p /dev/tmp/$dataDir"
-	cat $dataPackage | pv -trab | $AS "/dev/busybox tar -xzpf - -C /data/data/$dataDir"
-	echo "$AS chown -R $ID.$ID /data/data/$dataDir"
-	$AS "chown -R $ID.$ID /data/data/$dataDir"
+	dataPackage=$(echo "$appPackage" | sed 's/app_/data_/')
+    if [[ -f "$dataPackage" ]]; then
+        echo "Restoring data from $dataPackage"
+        cat "$dataPackage" | pv -trab | $AS "/dev/busybox tar -xzpf - -C /data/data/$dataDir"
+        $AS "chown -R $ID.$ID /data/data/$dataDir"
+    else
+        echo "No data package found for $appPrefix"
+    fi
 done
-echo "script exiting after adb install will want to fix securelinux perms with: restorecon -FRDv /data/data"
+
+echo "Fixing SELinux permissions..."
 $AS "restorecon -FRDv /data/data"
-cleanup
+
+popd > /dev/null
 

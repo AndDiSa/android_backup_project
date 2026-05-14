@@ -1,6 +1,13 @@
 #!/bin/bash
 
+# Ensure pipe errors are caught
+set -o pipefail
+
 A="adb"
+if [[ -n "$ADB_SERIAL" ]]; then
+    A="adb -s $ADB_SERIAL"
+fi
+
 AMAGISK="adb shell su root "      # -- needed for magisk rooted devices
 AMAGISK2="adb shell su 0 -c "     # -- needed for magisk rooted devices (depends on su version installed)
 AMAGISK3="adb shell su -c "       # -- needed for magisk rooted devices (depends on su version installed)
@@ -27,70 +34,20 @@ function checkForCleanData()
 
 function checkPrerequisites()
 {
-	adb=`adb --version`
-        if [ $? -ne 0 ]; then
-                echo "adb not found, please install adb"
-                exit 1
-        fi
-
-	git=`git --version`
-        if [ $? -ne 0 ]; then
-                echo "git not found, please install git"
-                exit 1
-        fi
-
-	tar=`tar --help`
-        if [ $? -ne 0 ]; then
-                echo "tar not found, please install tar"
-                exit 1
-	fi 
-
-        wc=`wc --help`
-        if [ $? -ne 0 ]; then
-                echo "wc not found, please install wc"
-                exit 1
-        fi
-
-        tr=`tr --help`
-        if [ $? -ne 0 ]; then
-                echo "tr not found, please install tr"
-                exit 1
-        fi
-
-        sed=`sed --help`
-        if [ $? -ne 0 ]; then
-                echo "sed not found, please install sed"
-                exit 1
-        fi
-
-        rev=`rev --help`
-        if [ $? -ne 0 ]; then
-                echo "rev not found, please install rev"
-                exit 1
-        fi
-
-        cut=`cut --help`
-        if [ $? -ne 0 ]; then
-                echo "cut not found, please install cut"
-                exit 1
-        fi
-
-        gzip=`gzip --help`
-        if [ $? -ne 0 ]; then
-                echo "gzip not found, please install gzip"
-                exit 1
-        fi
-
-	pv_required="1.6.6"
- 	pv_current=`pv -V | head -n 1 | cut -d " " -f2`
-	if [ $? -ne 0 ]; then
-		echo "pv not found, please install pv"
-		exit 1
-	else
-		if [ "$(printf '%s\n' "$pv_required" "$pv_current" | sort -V | head -n1)" != "$pv_required" ]; then
-                	echo "current version $pv_current of pv is lower than required version: $pv_required"
+	local deps=("adb" "git" "tar" "wc" "tr" "sed" "rev" "cut" "gzip" "pv")
+	for dep in "${deps[@]}"; do
+		if ! command -v "$dep" >/dev/null 2>&1; then
+			echo "$dep not found, please install $dep"
 			exit 1
 		fi
+	done
+
+	local pv_required="1.6.6"
+	local pv_current
+	pv_current=$(pv -V | head -n 1 | cut -d " " -f2)
+	if [ "$(printf '%s\n' "$pv_required" "$pv_current" | sort -V | head -n1)" != "$pv_required" ]; then
+		echo "current version $pv_current of pv is lower than required version: $pv_required"
+		exit 1
 	fi
 }
 
@@ -102,33 +59,25 @@ function checkRootType()
 	echo "Waiting for device..."
 	$A wait-for-any-device
 
-	result=`$AROOT whoami`
-	echo $result
+	local result
+	result=$($AROOT whoami 2>/dev/null | tr -d '\r')
+	echo "AROOT: $result"
 	if [[ "$result" == "root" ]]; then
 		AS=$AROOT
-	else
-		result=`$AMAGISK3 whoami`
-		echo $result
-        	if [[ "$result" == "root" ]]; then
-        		AS=$AMAGISK3
-		else
-
-			result=`$AMAGISK2 whoami`
-			echo $result
-        		if [[ "$result" == "root" ]]; then
-        			AS=$AMAGISK2
-			else
-				result=`$AMAGISK whoami`
-				echo $result
-	                	if [[ "$result" == "root" ]]; then
-                        		AS=$AMAGISK
-				else
-					echo "Fianlly root is not available for this device, exiting execution."
-					exit 1
-				fi
-			fi
-		fi
+		return 0
 	fi
+
+	for SU_CMD in "$AMAGISK3" "$AMAGISK2" "$AMAGISK"; do
+		result=$($SU_CMD whoami 2>/dev/null | tr -d '\r')
+		echo "SU_CMD ($SU_CMD): $result"
+		if [[ "$result" == "root" ]]; then
+			AS=$SU_CMD
+			return 0
+		fi
+	done
+
+	echo "Finally root is not available for this device, exiting execution."
+	exit 1
 }
 
 function lookForAdbDevice()
@@ -142,24 +91,28 @@ function lookForAdbDevice()
 
 function mkBackupDir()
 {
-	HW=`$AS getprop ro.hardware | tr -d '\r'`
-	BUILD=`$AS getprop ro.build.id | tr -d '\r'`
+	local HW
+	HW=$($AS getprop ro.hardware | tr -d '\r')
+	local BUILD
+	BUILD=$($AS getprop ro.build.id | tr -d '\r')
 
-	DATE=`date +%F`
+	local DATE
+	DATE=$(date +%F)
 	DIR="${HW}_${DATE}_${BUILD}"
-	if test -d "$DIR"; then
-    		echo "$DIR already exists, exiting"
-    		exit 2
+	if [[ -d "$DIR" ]]; then
+		echo "$DIR already exists, exiting"
+		exit 2
 	fi
 
 	echo "### Creating dir $DIR"
-	mkdir -p $DIR
+	mkdir -p "$DIR"
 }
 
 function pushBusybox()
 {
 	echo "Determining architecture..."
-	target_arch="$($AS uname -m)"
+	local target_arch
+	target_arch="$($AS uname -m | tr -d '\r')"
 	case $target_arch in
 		aarch64|arm64|armv8|armv8a)
 			target_arch=arm64
@@ -185,9 +138,9 @@ function pushBusybox()
 			;;
 	esac
 
-	echo "Pushing busybox to device..."
+	echo "Pushing busybox to device ($target_arch)..."
 
-	$A push busybox-ndk/busybox-$target_arch /sdcard/busybox
+	$A push "busybox-ndk/busybox-$target_arch" /sdcard/busybox
 	$AS "mv /sdcard/busybox /dev/busybox"
 	$AS "chmod +x /dev/busybox"
 
@@ -212,9 +165,9 @@ function updateBusybox()
 	if [ ! -d busybox-ndk ]; then
 		git clone https://github.com/Magisk-Modules-Repo/busybox-ndk
 	else
-		pushd busybox-ndk
+		pushd busybox-ndk > /dev/null
 		git pull
-		popd
+		popd > /dev/null
 	fi
 }
 
