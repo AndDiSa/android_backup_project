@@ -79,7 +79,7 @@ do
     fi
 
     # Create a new installation session with the calculated total size
-    create_cmd="pm install-create -S ${total_size}"
+    create_cmd="pm install-create -r -t -d -S ${total_size}"
     echo "Executing: $create_cmd"
     session=$($AS "$create_cmd")
     session_id=$(echo "$session" | grep -o '[0-9]\+')
