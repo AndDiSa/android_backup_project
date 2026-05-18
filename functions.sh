@@ -13,6 +13,36 @@ AMAGISK2="adb shell su 0 -c "     # -- needed for magisk rooted devices (depends
 AMAGISK3="adb shell su -c "       # -- needed for magisk rooted devices (depends on su version installed)
 AROOT="adb shell "
 
+USER_ID=0
+
+function resolveUserId()
+{
+	local identifier="$1"
+	if [[ -z "$identifier" ]]; then
+		USER_ID=0
+		return
+	fi
+
+	# If it's a number, assume it's the USER_ID
+	if [[ "$identifier" =~ ^[0-9]+$ ]]; then
+		USER_ID="$identifier"
+		return
+	fi
+
+	# Otherwise, try to resolve via pm list users
+	# Example output: UserInfo{10:Island:1030} running
+	local user_line
+	user_line=$($A shell pm list users | grep ":$identifier:")
+	if [[ -n "$user_line" ]]; then
+		# Extract ID between { and :
+		USER_ID=$(echo "$user_line" | cut -d "{" -f2 | cut -d ":" -f1)
+		echo "Resolved user '$identifier' to ID $USER_ID"
+	else
+		echo "Error: Could not resolve user '$identifier'"
+		exit 1
+	fi
+}
+
 function cleanup()
 {
 	$AS "rm /dev/busybox"
@@ -106,6 +136,15 @@ function mkBackupDir()
 
 	echo "### Creating dir $DIR"
 	mkdir -p "$DIR"
+}
+
+function getSystemDataDir()
+{
+    if [[ "$USER_ID" == "0" ]]; then
+        echo "/data/data"
+    else
+        echo "/data/user/$USER_ID"
+    fi
 }
 
 function pushBusybox()

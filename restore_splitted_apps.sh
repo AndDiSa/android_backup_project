@@ -21,11 +21,17 @@ sleep 5
 DIR="$1"
 
 if [[ ! -d "$DIR" ]]; then
-	echo "Usage: $0 <data-dir> [apps...]"
+	echo "Usage: $0 <data-dir> [--user <ID|Name>] [apps...]"
 	echo "Must be created with ./backup_apps.sh"
 	exit 2
 fi
 shift
+
+if [[ "$1" == "--user" ]]; then
+    shift
+    resolveUserId "$1"
+    shift
+fi
 
 checkPrerequisites
 
@@ -79,7 +85,7 @@ do
     fi
 
     # Create a new installation session with the calculated total size
-    create_cmd="pm install-create -r -t -d -S ${total_size}"
+    create_cmd="pm install-create --user ${USER_ID} -r -t -d -S ${total_size}"
     echo "Executing: $create_cmd"
     session=$($AS "$create_cmd")
     session_id=$(echo "$session" | grep -o '[0-9]\+')
@@ -132,17 +138,18 @@ do
 
     appPrefix=$(echo "$appPackage" | sed 's/app_//' | sed 's/\.tar\.gz//')
     dataDir=$appPrefix
+    systemDataDir=$(getSystemDataDir)
 
     echo "## Now installing app data"
-    $AS "pm clear $appPrefix"
+    $AS "pm clear --user $USER_ID $appPrefix"
     sleep 1
 
     # figure out current app user id
-    L=( $($AS ls -d -l "/data/data/$dataDir" 2>/dev/null) ) || :
+    L=( $($AS ls -d -l "$systemDataDir/$dataDir" 2>/dev/null) ) || :
     ID=${L[2]}
 
     if [[ -z "$ID" ]]; then
-        echo "Error: $appPrefix still not installed or data dir not created"
+        echo "Error: $appPrefix still not installed or data dir $systemDataDir/$dataDir not created"
         overall_error=1
         continue
     fi
@@ -151,13 +158,13 @@ do
 
     dataPackage=$(echo "$appPackage" | sed 's/app_/data_/')
     if [[ -f "$dataPackage" ]]; then
-        cat "$dataPackage" | pv -trab | $AS "/dev/busybox tar -xzpf - -C /data/data/$dataDir"
-        $AS "chown -R $ID.$ID /data/data/$dataDir"
+        cat "$dataPackage" | pv -trab | $AS "/dev/busybox tar -xzpf - -C $systemDataDir/$dataDir"
+        $AS "chown -R $ID.$ID $systemDataDir/$dataDir"
     fi
 done
 
 echo "Fixing SELinux permissions..."
-$AS "restorecon -FRDv /data/data"
+$AS "restorecon -FRDv $systemDataDir"
 
 popd > /dev/null
 

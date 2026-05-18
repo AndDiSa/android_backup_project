@@ -17,6 +17,12 @@ if [[ "$1" == "--system-apps" ]]; then
     SYSTEM_PATTERN="/system/app/\|/system/priv-app/\|/system/product/app/\|/system/product/priv-app/\|/product/overlay/"
 fi
 
+if [[ "$1" == "--user" ]]; then
+    shift
+    resolveUserId "$1"
+    shift
+fi
+
 checkPrerequisites
 
 updateBusybox
@@ -32,7 +38,7 @@ pushBusybox
 mkBackupDir
 pushd "$DIR" > /dev/null
 
-PACKAGES=$($A shell "cmd package list packages -f")
+PACKAGES=$($A shell "cmd package list packages --user $USER_ID -f")
 
 stopRuntime
 
@@ -53,6 +59,7 @@ while IFS= read -r line <&3; do
     appPath=$(echo "$clean_line" | rev | cut -d "=" -f2- | rev)
     dataDir=$(echo "$clean_line" | rev | cut -d "=" -f1 | rev)
     appDir="${appPath%/*}"
+    systemDataDir=$(getSystemDataDir)
 
     echo "--- Processing: $dataDir ---"
 
@@ -60,12 +67,12 @@ while IFS= read -r line <&3; do
         echo "Backing up APK..."
         $AS "/dev/busybox tar -cz -C \"$appDir\" . 2>/dev/null" | pv -trab > "app_${dataDir}.tar.gz"
         echo "Backing up Data..."
-        $AS "/dev/busybox tar -cz -C \"/data/data/$dataDir\" . 2>/dev/null" | pv -trab > "data_${dataDir}.tar.gz"
+        $AS "/dev/busybox tar -cz -C \"$systemDataDir/$dataDir\" . 2>/dev/null" | pv -trab > "data_${dataDir}.tar.gz"
     else
         echo "Backing up APK (root)..."
         $AS "cd \"$appDir\" && /dev/busybox tar czf - . 2>/dev/null" | pv -trab > "app_${dataDir}.tar.gz"
         echo "Backing up Data (root)..."
-        $AS "cd \"/data/data/$dataDir\" && /dev/busybox tar czf - . 2>/dev/null" | pv -trab > "data_${dataDir}.tar.gz"
+        $AS "cd \"$systemDataDir/$dataDir\" && /dev/busybox tar czf - . 2>/dev/null" | pv -trab > "data_${dataDir}.tar.gz"
     fi
 
 done 3< <(echo "$PACKAGES" | tr " " "\n" | grep "${PATTERN}")

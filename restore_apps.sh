@@ -22,11 +22,17 @@ sleep 5
 DIR="$1"
 
 if [[ ! -d "$DIR" ]]; then
-	echo "Usage: $0 <data-dir> [apps...]"
+	echo "Usage: $0 <data-dir> [--user <ID|Name>] [apps...]"
 	echo "Must be created with ./backup_apps.sh"
 	exit 2
 fi
 shift
+
+if [[ "$1" == "--user" ]]; then
+    shift
+    resolveUserId "$1"
+    shift
+fi
 
 checkPrerequisites
 
@@ -76,27 +82,28 @@ do
 
 	echo "Installing ${EXTRACTED_APKS[*]}"
     # install-multiple handles one or more APKs
-	$A install-multiple -r -t "${EXTRACTED_APKS[@]}"
+	$A install-multiple --user $USER_ID -r -t "${EXTRACTED_APKS[@]}"
 	rm -f "$LOCAL_TEMP"/*.apk
 
 	appPrefix=$(echo "$appPackage" | sed 's/app_//' | sed 's/\.tar\.gz//')
 	echo "Package Name: $appPrefix"
 
 	dataDir=$appPrefix
+	systemDataDir=$(getSystemDataDir)
 
 	echo "## Now installing app data"
-	$AS "pm clear $appPrefix"
+	$AS "pm clear --user $USER_ID $appPrefix"
 	sleep 1
 
-	echo "Attempting to restore data for $appPrefix"
+	echo "Attempting to restore data for $appPrefix (User $USER_ID)"
 	# figure out current app user id
-	L=( $($AS ls -d -l "/data/data/$dataDir" 2>/dev/null) ) || :
+	L=( $($AS ls -d -l "$systemDataDir/$dataDir" 2>/dev/null) ) || :
 	# drwx------ 10 u0_a240 u0_a240 4096 2017-12-10 13:45 .
 	# => return u0_a240
 	ID=${L[2]}
 
 	if [[ -z $ID ]]; then
-	    echo "Error: $appPrefix still not installed or data dir not created"
+	    echo "Error: $appPrefix still not installed or data dir $systemDataDir/$dataDir not created"
 	    continue
 	fi
 
@@ -105,15 +112,15 @@ do
 	dataPackage=$(echo "$appPackage" | sed 's/app_/data_/')
     if [[ -f "$dataPackage" ]]; then
         echo "Restoring data from $dataPackage"
-        cat "$dataPackage" | pv -trab | $AS "/dev/busybox tar -xzpf - -C /data/data/$dataDir"
-        $AS "chown -R $ID.$ID /data/data/$dataDir"
+        cat "$dataPackage" | pv -trab | $AS "/dev/busybox tar -xzpf - -C $systemDataDir/$dataDir"
+        $AS "chown -R $ID.$ID $systemDataDir/$dataDir"
     else
         echo "No data package found for $appPrefix"
     fi
 done
 
 echo "Fixing SELinux permissions..."
-$AS "restorecon -FRDv /data/data"
+$AS "restorecon -FRDv $systemDataDir"
 
 popd > /dev/null
 
