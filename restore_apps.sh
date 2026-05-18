@@ -28,11 +28,21 @@ if [[ ! -d "$DIR" ]]; then
 fi
 shift
 
-if [[ "$1" == "--user" ]]; then
-    shift
-    resolveUserId "$1"
-    shift
-fi
+# Default context from metadata if available
+readBackupMetadata
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --user)
+            shift
+            resolveUserId "$1"
+            shift
+            ;;
+        *)
+            break
+            ;;
+    esac
+done
 
 checkPrerequisites
 
@@ -80,19 +90,29 @@ do
         continue
     fi
 
-	echo "Installing ${EXTRACTED_APKS[*]}"
-    # install-multiple handles one or more APKs
-	$A install-multiple --user $USER_ID -r -t "${EXTRACTED_APKS[@]}"
-	rm -f "$LOCAL_TEMP"/*.apk
-
 	appPrefix=$(echo "$appPackage" | sed 's/app_//' | sed 's/\.tar\.gz//')
 	echo "Package Name: $appPrefix"
+
+	echo "Installing ${EXTRACTED_APKS[*]}"
+
+    # Identify original installer to maintain attribution
+    installer=$(getInstaller "$appPrefix")
+    installer_flag=""
+    if [[ -n "$installer" && "$installer" != "null" ]]; then
+        echo "Spoofing installer: $installer"
+        installer_flag="-i $installer"
+    fi
+
+    # install-multiple handles one or more APKs
+	$A install-multiple --user $USER_ID $installer_flag -r -t "${EXTRACTED_APKS[@]}"
+    setInstaller "$appPrefix" "$installer"
+	rm -f "$LOCAL_TEMP"/*.apk
 
 	dataDir=$appPrefix
 	systemDataDir=$(getSystemDataDir)
 
 	echo "## Now installing app data"
-	$AS "pm clear --user $USER_ID $appPrefix"
+	clearAppData "$appPrefix" "$systemDataDir"
 	sleep 1
 
 	echo "Attempting to restore data for $appPrefix (User $USER_ID)"
@@ -113,14 +133,28 @@ do
     if [[ -f "$dataPackage" ]]; then
         echo "Restoring data from $dataPackage"
         cat "$dataPackage" | pv -trab | $AS "/dev/busybox tar -xzpf - -C $systemDataDir/$dataDir"
-        $AS "chown -R $ID.$ID $systemDataDir/$dataDir"
+
+        # Surgical chown: Main User/Group
+        $AS "chown -R $ID:$ID $systemDataDir/$dataDir"
+
+        # Surgical chown: Cache Group (if exists)
+        # Android uses a special _cache suffix for cache directories to isolate them.
+        CACHE_ID="${ID}_cache"
+        if $AS "id $CACHE_ID" >/dev/null 2>&1; then
+            echo "Applying cache group $CACHE_ID to cache directories"
+            $AS "chown -R $ID:$CACHE_ID $systemDataDir/$dataDir/cache" 2>/dev/null || :
+            $AS "chown -R $ID:$CACHE_ID $systemDataDir/$dataDir/code_cache" 2>/dev/null || :
+        fi
+
+        # Force restorecon to update SELinux MCS categories for Work Profiles
+        $AS "restorecon -FRv $systemDataDir/$dataDir"
     else
         echo "No data package found for $appPrefix"
     fi
 done
 
-echo "Fixing SELinux permissions..."
-$AS "restorecon -FRDv $systemDataDir"
+echo "Finalizing permissions..."
+$AS "restorecon -Rv $systemDataDir"
 
 popd > /dev/null
 

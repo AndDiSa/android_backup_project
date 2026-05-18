@@ -11,17 +11,23 @@ curr_dir="$(dirname "$0")"
 set -e
 set -o pipefail
 
-SYSTEM_PATTERN=""
-if [[ "$1" == "--system-apps" ]]; then
-    shift
-    SYSTEM_PATTERN="/system/app/\|/system/priv-app/\|/system/product/app/\|/system/product/priv-app/\|/product/overlay/"
-fi
-
-if [[ "$1" == "--user" ]]; then
-    shift
-    resolveUserId "$1"
-    shift
-fi
+SYSTEM_APPS=0
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --system-apps)
+            SYSTEM_APPS=1
+            shift
+            ;;
+        --user)
+            shift
+            resolveUserId "$1"
+            shift
+            ;;
+        *)
+            break
+            ;;
+    esac
+done
 
 checkPrerequisites
 
@@ -35,20 +41,26 @@ checkForCleanData
 
 pushBusybox
 
+resolveUserName
 mkBackupDir
+writeBackupMetadata
 pushd "$DIR" > /dev/null
 
-PACKAGES=$($A shell "cmd package list packages --user $USER_ID -f")
+PM_FLAGS="-f"
+if [[ "$SYSTEM_APPS" == "0" ]]; then
+    PM_FLAGS="$PM_FLAGS -3"
+fi
+
+# Capture installer info first
+echo "## Capturing installer metadata"
+# We remove -f here to get clean package names without APK paths
+$A shell "pm list packages --user $USER_ID -i ${PM_FLAGS/-f/}" | tr -d '\r' > "installers.txt"
+
+PACKAGES=$($A shell "pm list packages --user $USER_ID $PM_FLAGS")
 
 stopRuntime
 
 echo "## Pull apps"
-
-DATA_PATTERN="/data/app/"
-PATTERN="$DATA_PATTERN"
-if [[ -n "$SYSTEM_PATTERN" ]]; then
-    PATTERN="${SYSTEM_PATTERN}\|${DATA_PATTERN}"
-fi
 
 # Use a separate file descriptor (3) for the loop input.
 # This prevents 'adb shell' inside the loop from consuming the list of packages from stdin.
@@ -75,7 +87,7 @@ while IFS= read -r line <&3; do
         $AS "cd \"$systemDataDir/$dataDir\" && /dev/busybox tar czf - . 2>/dev/null" | pv -trab > "data_${dataDir}.tar.gz"
     fi
 
-done 3< <(echo "$PACKAGES" | tr " " "\n" | grep "${PATTERN}")
+done 3< <(echo "$PACKAGES" | tr " " "\n")
 
 cleanup
 

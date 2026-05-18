@@ -14,6 +14,7 @@ AMAGISK3="adb shell su -c "       # -- needed for magisk rooted devices (depends
 AROOT="adb shell "
 
 USER_ID=0
+USER_NAME=""
 
 function resolveUserId()
 {
@@ -30,17 +31,30 @@ function resolveUserId()
 	fi
 
 	# Otherwise, try to resolve via pm list users
-	# Example output: UserInfo{10:Island:1030} running
+	# Example output: UserInfo{10: Island :1030} running
 	local user_line
-	user_line=$($A shell pm list users | grep ":$identifier:")
+	user_line=$($A shell pm list users | grep -i ":[[:space:]]*$identifier[[:space:]]*:")
 	if [[ -n "$user_line" ]]; then
 		# Extract ID between { and :
 		USER_ID=$(echo "$user_line" | cut -d "{" -f2 | cut -d ":" -f1)
 		echo "Resolved user '$identifier' to ID $USER_ID"
 	else
 		echo "Error: Could not resolve user '$identifier'"
+		# List available users to help the user
+		$A shell pm list users
 		exit 1
 	fi
+}
+
+function resolveUserName()
+{
+    # Example output: UserInfo{10: Island :1030} running
+    local user_line
+    user_line=$($A shell pm list users | grep "^[[:space:]]*UserInfo{$USER_ID:")
+    if [[ -n "$user_line" ]]; then
+        # Extract name between : and :
+        USER_NAME=$(echo "$user_line" | cut -d ":" -f2 | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+    fi
 }
 
 function cleanup()
@@ -129,6 +143,15 @@ function mkBackupDir()
 	local DATE
 	DATE=$(date +%F)
 	DIR="${HW}_${DATE}_${BUILD}"
+
+    if [[ "$USER_ID" != "0" ]]; then
+        if [[ -n "$USER_NAME" ]]; then
+            DIR="${DIR}_${USER_NAME}"
+        else
+            DIR="${DIR}_u${USER_ID}"
+        fi
+    fi
+
 	if [[ -d "$DIR" ]]; then
 		echo "$DIR already exists, exiting"
 		exit 2
@@ -138,12 +161,82 @@ function mkBackupDir()
 	mkdir -p "$DIR"
 }
 
+function writeBackupMetadata()
+{
+    local meta_file="$DIR/backup_info.txt"
+    echo "Creating metadata file: $meta_file"
+    echo "HW=$($AS getprop ro.hardware | tr -d '\r')" > "$meta_file"
+    echo "BUILD=$($AS getprop ro.build.id | tr -d '\r')" >> "$meta_file"
+    echo "DATE=$(date +%F)" >> "$meta_file"
+    echo "BACKUP_USER_ID=$USER_ID" >> "$meta_file"
+    echo "USER_NAME=$USER_NAME" >> "$meta_file"
+}
+
+function readBackupMetadata()
+{
+    local meta_file="$DIR/backup_info.txt"
+    if [[ -f "$meta_file" ]]; then
+        echo "Reading metadata from $meta_file"
+        local saved_name
+        saved_name=$(grep "^USER_NAME=" "$meta_file" | cut -d "=" -f2 || true)
+        local saved_id
+        saved_id=$(grep "^BACKUP_USER_ID=" "$meta_file" | cut -d "=" -f2 || true)
+
+        if [[ -n "$saved_name" ]]; then
+            echo "Backup was for user name: $saved_name"
+            # Try to resolve the current ID for this name on this device
+            resolveUserId "$saved_name"
+        elif [[ -n "$saved_id" ]]; then
+            echo "Backup was for user ID: $saved_id"
+            USER_ID="$saved_id"
+        fi
+    else
+        echo "No metadata file found, defaulting to User ID $USER_ID"
+    fi
+}
+
 function getSystemDataDir()
 {
     if [[ "$USER_ID" == "0" ]]; then
         echo "/data/data"
     else
         echo "/data/user/$USER_ID"
+    fi
+}
+
+function getInstaller()
+{
+    local pkg="$1"
+    local installers_file="installers.txt"
+    if [[ -f "$installers_file" ]]; then
+        # Example line: package:com.example.app  installer=com.android.vending
+        # We use a strict match to avoid partial package name matches
+        grep "^package:$pkg " "$installers_file" | head -n 1 | sed 's/.*installer=//' | tr -d '\r ' || true
+    fi
+}
+
+function setInstaller()
+{
+    local pkg="$1"
+    local installer="$2"
+    if [[ -n "$installer" && "$installer" != "null" ]]; then
+        echo "Setting installer attribution to $installer"
+        # On some Android versions, -i flag during install is not enough
+        $AS "pm set-installer-package $pkg $installer" 2>/dev/null || :
+    fi
+}
+
+function clearAppData()
+{
+    local pkg="$1"
+    local systemDataDir="$2"
+
+    echo "Attempting to clear data for $pkg via pm clear..."
+    if ! $AS "pm clear --user $USER_ID $pkg"; then
+        echo "WARNING: pm clear failed for $pkg (likely Profile Owner protection). Attempting manual purge..."
+        # Manually delete subdirectories and files, but keep the package root
+        $AS "find $systemDataDir/$pkg -mindepth 1 -maxdepth 1 -exec rm -rf {} +" || :
+        echo "Manual purge of $pkg data complete."
     fi
 }
 

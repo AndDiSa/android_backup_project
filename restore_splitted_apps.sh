@@ -27,11 +27,21 @@ if [[ ! -d "$DIR" ]]; then
 fi
 shift
 
-if [[ "$1" == "--user" ]]; then
-    shift
-    resolveUserId "$1"
-    shift
-fi
+# Default context from metadata if available
+readBackupMetadata
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --user)
+            shift
+            resolveUserId "$1"
+            shift
+            ;;
+        *)
+            break
+            ;;
+    esac
+done
 
 checkPrerequisites
 
@@ -84,8 +94,18 @@ do
         continue
     fi
 
+    appPrefix=$(echo "$appPackage" | sed 's/app_//' | sed 's/\.tar\.gz//')
+
+    # Identify original installer to maintain attribution
+    installer=$(getInstaller "$appPrefix")
+    installer_flag=""
+    if [[ -n "$installer" && "$installer" != "null" ]]; then
+        echo "Spoofing installer: $installer"
+        installer_flag="-i $installer"
+    fi
+
     # Create a new installation session with the calculated total size
-    create_cmd="pm install-create --user ${USER_ID} -r -t -d -S ${total_size}"
+    create_cmd="pm install-create --user ${USER_ID} $installer_flag -r -t -d -S ${total_size}"
     echo "Executing: $create_cmd"
     session=$($AS "$create_cmd")
     session_id=$(echo "$session" | grep -o '[0-9]\+')
@@ -132,6 +152,7 @@ do
         overall_error=1
         continue
     fi
+    setInstaller "$appPrefix" "$installer"
 
     # Clean up the temporary directory
     rm -rf "$temp_dir"
@@ -141,7 +162,7 @@ do
     systemDataDir=$(getSystemDataDir)
 
     echo "## Now installing app data"
-    $AS "pm clear --user $USER_ID $appPrefix"
+    clearAppData "$appPrefix" "$systemDataDir"
     sleep 1
 
     # figure out current app user id
@@ -159,12 +180,25 @@ do
     dataPackage=$(echo "$appPackage" | sed 's/app_/data_/')
     if [[ -f "$dataPackage" ]]; then
         cat "$dataPackage" | pv -trab | $AS "/dev/busybox tar -xzpf - -C $systemDataDir/$dataDir"
-        $AS "chown -R $ID.$ID $systemDataDir/$dataDir"
+
+        # Surgical chown: Main User/Group
+        $AS "chown -R $ID:$ID $systemDataDir/$dataDir"
+
+        # Surgical chown: Cache Group (if exists)
+        CACHE_ID="${ID}_cache"
+        if $AS "id $CACHE_ID" >/dev/null 2>&1; then
+            echo "Applying cache group $CACHE_ID to cache directories"
+            $AS "chown -R $ID:$CACHE_ID $systemDataDir/$dataDir/cache" 2>/dev/null || :
+            $AS "chown -R $ID:$CACHE_ID $systemDataDir/$dataDir/code_cache" 2>/dev/null || :
+        fi
+
+        # Force restorecon to update SELinux MCS categories for Work Profiles
+        $AS "restorecon -FRv $systemDataDir/$dataDir"
     fi
 done
 
-echo "Fixing SELinux permissions..."
-$AS "restorecon -FRDv $systemDataDir"
+echo "Finalizing permissions..."
+$AS "restorecon -Rv $systemDataDir"
 
 popd > /dev/null
 
