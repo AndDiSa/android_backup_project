@@ -121,7 +121,8 @@ do
     # Write each APK into the session in order
     index=0
     error=0
-    # Use dedicated file descriptor 3 to prevent adb from consuming the file list
+    # Use dedicated file descriptor 3 to prevent adb from consuming the file list from stdin.
+    # This is critical when running 'adb shell' inside a loop that reads from a process substitution.
     while IFS= read -r -d '' file_path <&3; do
         size=$(stat --format="%s" "$file_path")
 

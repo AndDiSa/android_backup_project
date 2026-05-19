@@ -20,17 +20,19 @@ function resolveUserId()
 {
 	local identifier="$1"
 	if [[ -z "$identifier" ]]; then
+		# Default to owner/main user if no identifier provided
 		USER_ID=0
 		return
 	fi
 
-	# If it's a number, assume it's the USER_ID
+	# If it's a number, assume it's the USER_ID directly
 	if [[ "$identifier" =~ ^[0-9]+$ ]]; then
 		USER_ID="$identifier"
 		return
 	fi
 
 	# Otherwise, try to resolve via pm list users
+	# This handles work profiles which might have names like "Island" or "Work Profile"
 	# Example output: UserInfo{10: Island :1030} running
 	local user_line
 	user_line=$($A shell pm list users | grep -i ":[[:space:]]*$identifier[[:space:]]*:")
@@ -40,7 +42,7 @@ function resolveUserId()
 		echo "Resolved user '$identifier' to ID $USER_ID"
 	else
 		echo "Error: Could not resolve user '$identifier'"
-		# List available users to help the user
+		# List available users to help the user choose the right identifier
 		$A shell pm list users
 		exit 1
 	fi
@@ -197,9 +199,11 @@ function readBackupMetadata()
 
 function getSystemDataDir()
 {
+    # Main user (User 0) uses /data/data
     if [[ "$USER_ID" == "0" ]]; then
         echo "/data/data"
     else
+        # All other users (Work Profiles, Guest, etc.) use /data/user/<id>
         echo "/data/user/$USER_ID"
     fi
 }
@@ -233,8 +237,10 @@ function clearAppData()
 
     echo "Attempting to clear data for $pkg via pm clear..."
     if ! $AS "pm clear --user $USER_ID $pkg"; then
+        # On some Managed Profiles (Work Profiles), the Profile Owner may prevent 'pm clear'.
+        # In such cases, we fall back to a manual recursive deletion of contents.
         echo "WARNING: pm clear failed for $pkg (likely Profile Owner protection). Attempting manual purge..."
-        # Manually delete subdirectories and files, but keep the package root
+        # Manually delete subdirectories and files, but keep the package root directory to preserve base permissions
         $AS "find $systemDataDir/$pkg -mindepth 1 -maxdepth 1 -exec rm -rf {} +" || :
         echo "Manual purge of $pkg data complete."
     fi

@@ -19,6 +19,8 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --user)
+            # Support for multi-user / work profiles
+            # Usage: --user <ID> or --user <Name> (e.g. Island)
             shift
             resolveUserId "$1"
             shift
@@ -54,8 +56,10 @@ fi
 # Capture installer info first
 echo "## Capturing installer metadata"
 # We remove -f here to get clean package names without APK paths
+# The --user flag is essential to see apps specifically installed in the work profile
 $A shell "pm list packages --user $USER_ID -i ${PM_FLAGS/-f/}" | tr -d '\r' > "installers.txt"
 
+# Get the list of packages with their APK paths (-f) and data directory names
 PACKAGES=$($A shell "pm list packages --user $USER_ID $PM_FLAGS")
 
 stopRuntime

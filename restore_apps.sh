@@ -146,14 +146,16 @@ do
             $AS "chown -R $ID:$CACHE_ID $systemDataDir/$dataDir/code_cache" 2>/dev/null || :
         fi
 
-        # Force restorecon to update SELinux MCS categories for Work Profiles
+    # Force restorecon to update SELinux labels.
+        # The -F flag is important to force-reset the context, ensuring the correct MCS
+        # categories (e.g. :c512,c768) are applied for work profile data isolation.
         $AS "restorecon -FRv $systemDataDir/$dataDir"
     else
         echo "No data package found for $appPrefix"
     fi
 done
 
-echo "Finalizing permissions..."
+echo "Finalizing permissions for the entire user data root..."
 $AS "restorecon -Rv $systemDataDir"
 
 popd > /dev/null
