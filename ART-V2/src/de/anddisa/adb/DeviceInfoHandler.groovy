@@ -14,6 +14,7 @@ import de.anddisa.adb.entities.BlockInfo
 class DeviceInfoHandler {
 	ADBCommander commander
 	NativeDevice currentDevice
+    int userId = 0
 
 	public DeviceInfoHandler(ADBCommander commander) {
 		this.commander = commander
@@ -23,11 +24,15 @@ class DeviceInfoHandler {
 		currentDevice = new NativeDevice(commander.device, stateMonitor, allocationMonitor)
 	}
 
-	public List<BackupPackage> getInstalledPackagesFromDevice(String filter) {
+	public List<BackupPackage> getInstalledPackagesFromDevice(String filter, boolean includeSystem = false) {
 		List<BackupPackage> packages = []
 
-		String[] allPackages = commander.execForResult("cmd package list packages -f").split(System.lineSeparator())
+        String pmFlags = "-f"
+        if (!includeSystem) pmFlags += " -3"
+
+		String[] allPackages = commander.execForResult("pm list packages --user ${userId} ${pmFlags}").split(System.lineSeparator())
 		for (String p : allPackages) {
+            if (!p.startsWith("package:")) continue
 			def pathConfig = p.replace("package:", "")
 			def index = pathConfig.lastIndexOf("=")
 			def appPath = pathConfig.substring(0, index)
@@ -35,8 +40,12 @@ class DeviceInfoHandler {
 				BackupPackage bp = new BackupPackage()
 				bp.packageName = pathConfig.substring(index + 1)
 				bp.appDirectoryOnDevice = appPath.substring(0, appPath.lastIndexOf("/"))
-				bp.dataDirectoryOnDevice = "/data/data/" + pathConfig.substring(index + 1)
-				bp.selected = false
+                if (userId == 0) {
+    				bp.dataDirectoryOnDevice = "/data/data/" + bp.packageName
+                } else {
+                    bp.dataDirectoryOnDevice = "/data/user/${userId}/" + bp.packageName
+                }
+				bp.selected = true
 				bp.successful = false
 				packages.add(bp)
 			}
@@ -67,13 +76,13 @@ class DeviceInfoHandler {
 
 	List<BlockInfo> listBlockDeviceMapping() {
 		List<BlockInfo> result = []
-		String[] allBlockDevices = commander.execForResult("su 0 -c 'ls -l /dev/block/mapper/'").split(System.lineSeparator())
+		String[] allBlockDevices = commander.execAsRootForResult("ls -l /dev/block/mapper/").split(System.lineSeparator())
 		for (String block : allBlockDevices) {
-			String[] parts = block.split(" ")
+			String[] parts = block.split("\\s+")
 			if (parts[0].startsWith("l")) {
 				BlockInfo bi = new BlockInfo()
-				bi.name = parts[8]
-				bi.blockDevice = parts[10]
+				bi.name = parts[parts.length - 3]
+				bi.blockDevice = parts[parts.length - 1]
 				result.add(bi)
 			}
 		}
@@ -82,13 +91,13 @@ class DeviceInfoHandler {
 
 	List<BlockInfo> listBlockDeviceByName() {
 		List<BlockInfo> result = []
-		String[] allBlockDevices = commander.execForResult("su 0 -c 'ls -l /dev/block/by-name/'").split(System.lineSeparator())
+		String[] allBlockDevices = commander.execAsRootForResult("ls -l /dev/block/by-name/").split(System.lineSeparator())
 		for (String block : allBlockDevices) {
-			String[] parts = block.split(" ")
+			String[] parts = block.split("\\s+")
 			if (parts[0].startsWith("l")) {
 				BlockInfo bi = new BlockInfo()
-				bi.name = parts[7]
-				bi.blockDevice = parts[9]
+				bi.name = parts[parts.length - 3]
+				bi.blockDevice = parts[parts.length - 1]
 				result.add(bi)
 			}
 		}

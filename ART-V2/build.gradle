@@ -1,0 +1,61 @@
+plugins {
+    id 'groovy'
+    id 'application'
+    id 'com.github.johnrengelman.shadow' version '8.1.1'
+}
+
+group 'de.anddisa'
+version '1.0-SNAPSHOT'
+
+repositories {
+    mavenCentral()
+    google()
+}
+
+dependencies {
+    implementation localGroovy()
+    
+    // Maven dependencies
+    implementation 'com.android.tools.ddms:ddmlib:32.2.1'
+    implementation 'commons-cli:commons-cli:1.11.0'
+    implementation 'org.apache.commons:commons-compress:1.28.0'
+    
+    // Local Tradefed dependency (not on Maven)
+    implementation files('lib/tradefed.jar')
+    
+    testImplementation 'org.spockframework:spock-core:2.3-groovy-3.0'
+}
+
+sourceSets {
+    main {
+        groovy {
+            srcDirs = ['src']
+        }
+    }
+    test {
+        groovy {
+            srcDirs = ['test']
+        }
+    }
+}
+
+test {
+    useJUnitPlatform()
+}
+
+application {
+    mainClass = 'de.anddisa.adb.ABP'
+}
+
+shadowJar {
+   archiveFileName = 'ART-V2.jar'
+   manifest {
+       attributes 'Main-Class': 'de.anddisa.adb.ABP'
+   }
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}

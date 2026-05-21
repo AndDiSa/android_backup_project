@@ -8,8 +8,9 @@ class BackupPackage {
 	String localDataPath
 	boolean selected
 	boolean successful
+    String installer
 	
 	public String toString() {
-		packageName + " : " + appDirectoryOnDevice + " : " + dataDirectoryOnDevice + " : " + localAppPath + " : " + localDataPath + " : " + selected + " : " + successful
+		packageName + " : " + appDirectoryOnDevice + " : " + dataDirectoryOnDevice + " : " + localAppPath + " : " + localDataPath + " : " + selected + " : " + successful + " : " + (installer ?: "null")
 	}
 }

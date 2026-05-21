@@ -23,8 +23,20 @@ import java.util.concurrent.TimeUnit
 import java.util.regex.Matcher
 import java.util.regex.Pattern
 
+/**
+ * ADBCommander provides a high-level API for interacting with Android devices.
+ * It uses the Android Debug Bridge (ddmlib) to execute shell commands,
+ * manage files, and perform UI interactions (tap, swipe, etc.).
+ * 
+ * Features include:
+ * - Dynamic root detection (trying multiple su variants)
+ * - Automatic architecture detection and Busybox deployment
+ * - User/Profile name resolution to numeric IDs
+ * - Root-wrapped command execution (execAsRoot)
+ */
 public class ADBCommander {
 
+	/** Thread-safe collector for shell command output */
 	public ThreadLocal<TextResponseCollector> responseCollector = new ThreadLocal<TextResponseCollector>() {
 		@Override protected TextResponseCollector initialValue() { return new TextResponseCollector() }
 	}
@@ -66,6 +78,8 @@ public class ADBCommander {
 
     boolean outputToStdOut = false
 
+    String rootCommand = ""
+
     void waitDeviceList(AndroidDebugBridge bridge) {
         int count = 0
         for (; count < 300 && bridge.hasInitialDeviceList() == false; count++) {
@@ -84,6 +98,10 @@ public class ADBCommander {
         return outputToStdOut
     }
 
+    /**
+     * Constructor: Initializes the Android Debug Bridge (ADB).
+     * It ensures the adb server is running and selects the first available device by default.
+     */
     public ADBCommander() {
         try {
             // make sure start-up adb
@@ -95,11 +113,12 @@ public class ADBCommander {
             waitDeviceList(bridge)
 
             List<IDevice> devices = bridge.getDevices()
-            if(devices == null || devices.size() <= 0) {
-                throw new RuntimeException("No device detected.")
+            if(devices != null && devices.size() > 0) {
+                device = devices.get(0)
+                System.out.println("Connected, device is " + device.getName())
+            } else {
+                System.out.println("No device detected initially.")
             }
-            device = devices.get(0)
-            System.out.println("Connected, device is " + device.getName())
         } catch(Exception e) {
             if(e instanceof RuntimeException) {
                 throw (RuntimeException)e
@@ -113,6 +132,149 @@ public class ADBCommander {
 		this.device = device
 		System.out.println("Connected, device is " + device.getName())
 	}
+
+    /**
+     * Checks for root access using various 'su' commands.
+     * Sets 'rootCommand' to the first successful command.
+     */
+    public boolean checkRootType() {
+        println "Checking for root access..."
+        
+        // Try 'adb root' first
+        try {
+            device.root()
+            Thread.sleep(1000) // Give it a moment to restart adbd if necessary
+        } catch (Exception e) {
+            println "adb root failed or not supported: ${e.message}"
+        }
+
+        String result = execForResult("whoami").trim()
+        if (result == "root") {
+            rootCommand = ""
+            println "Root access available via adbd (AROOT)"
+            return true
+        }
+
+        // Try different su variants
+        String[] suVariants = ["su 0 -c", "su -c", "su root"]
+        for (String su : suVariants) {
+            result = execForResult("${su} whoami").trim()
+            if (result == "root") {
+                rootCommand = su
+                println "Root access available via '${su}'"
+                return true
+            }
+        }
+
+        println "Finally root is not available for this device."
+        return false
+    }
+
+    /**
+     * Detects device architecture and pushes the appropriate Busybox binary.
+     */
+    public void pushBusybox(String localBusyboxDir) {
+        println "Determining architecture..."
+        String arch = execForResult("uname -m").trim()
+        String targetArch = ""
+
+        switch (arch) {
+            case ~/aarch64|arm64|armv8|armv8a/:
+                targetArch = "arm64"
+                break
+            case ~/aarch32|arm32|arm|armv7|armv7a|armv7l|armv8l|arm-neon|armv7a-neon|aarch|ARM/:
+                targetArch = "arm"
+                break
+            case ~/x86_64|x64|amd64|AMD64|amd/:
+                targetArch = "x86_64"
+                break
+            case ~/x86|x86_32|IA32|ia32|intel32|i386|i486|i586|i686|intel/:
+                targetArch = "x86"
+                break
+            default:
+                throw new RuntimeException("Unrecognized architecture: ${arch}")
+        }
+
+        println "Pushing busybox for ${targetArch}..."
+        String localPath = "${localBusyboxDir}/busybox-${targetArch}"
+        try {
+            device.pushFile(localPath, "/sdcard/busybox")
+            execAsRoot("mv /sdcard/busybox /dev/busybox")
+            execAsRoot("chmod +x /dev/busybox")
+            
+            String version = execAsRootForResult("/dev/busybox --help") ?: ""
+            if (version.contains("BusyBox")) {
+                println "Busybox deployed successfully to /dev/busybox"
+            } else {
+                throw new RuntimeException("Busybox deployment failed: Help output invalid")
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to push busybox: ${e.message}", e)
+        }
+    }
+
+    /**
+     * Resolves a user identifier (ID or Name) to a User ID.
+     */
+    public int resolveUserId(String identifier) {
+        if (!identifier || identifier == "0") return 0
+        if (identifier.isInteger()) return identifier.toInteger()
+
+        String usersList = execForResult("pm list users")
+        // Example: UserInfo{10: Island :1030} running
+        Pattern p = Pattern.compile("UserInfo\\{(\\d+):\\s*" + Pattern.quote(identifier) + "\\s*:")
+        Matcher m = p.matcher(usersList)
+        if (m.find()) {
+            int id = m.group(1).toInteger()
+            println "Resolved user '${identifier}' to ID ${id}"
+            return id
+        }
+        
+        println "Error: Could not resolve user '${identifier}'"
+        println usersList
+        return -1
+    }
+
+    /**
+     * Resolves a User ID to a User Name.
+     */
+    public String resolveUserName(int userId) {
+        if (userId == 0) return "Owner"
+        String usersList = execForResult("pm list users")
+        Pattern p = Pattern.compile("UserInfo\\{" + userId + ":\\s*([^:]+)\\s*:")
+        Matcher m = p.matcher(usersList)
+        if (m.find()) {
+            return m.group(1).trim()
+        }
+        return "u${userId}"
+    }
+
+    /**
+     * Executes a command as root.
+     */
+    public void execAsRoot(String cmd) {
+        if (rootCommand) {
+            exec("${rootCommand} \"${cmd}\"")
+        } else {
+            exec(cmd)
+        }
+    }
+
+    public String execAsRootForResult(String cmd) {
+        if (rootCommand) {
+            return execForResult("${rootCommand} \"${cmd}\"")
+        } else {
+            return execForResult(cmd)
+        }
+    }
+
+    public void execAsRootForResult(String cmd, IShellOutputReceiver collector, int time, TimeUnit unit) {
+        if (rootCommand) {
+            execForResult("${rootCommand} \"${cmd}\"", collector, time, unit)
+        } else {
+            execForResult(cmd, collector, time, unit)
+        }
+    }
 
     void tap(int x, int y) {
         execf("input tap %d %d", x, y)
@@ -225,6 +387,10 @@ public class ADBCommander {
         return execForResult(String.format(cmd, args))
     }
 
+    /**
+     * Executes a shell command on the device without returning output.
+     * @param cmd The shell command to execute.
+     */
     void exec(String cmd) {
         try {
             device.executeShellCommand(cmd, outputToStdOut ? RECEIVER_STD : RECEIVER_SILENT, 20, TimeUnit.SECONDS);
@@ -235,6 +401,11 @@ public class ADBCommander {
         }
     }
 
+    /**
+     * Executes a shell command and returns the output as a String.
+     * @param cmd The shell command to execute.
+     * @return The command output collected via TextResponseCollector.
+     */
     String execForResult(String cmd) {
         try {
             TextResponseCollector collector
