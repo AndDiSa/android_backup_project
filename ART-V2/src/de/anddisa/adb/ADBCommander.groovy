@@ -171,29 +171,30 @@ public class ADBCommander {
     }
 
     /**
+     * Returns the normalized architecture string for the device.
+     */
+    public String getArchitecture() {
+        String arch = execForResult("uname -m").trim()
+        switch (arch) {
+            case ~/aarch64|arm64|armv8|armv8a/:
+                return "arm64"
+            case ~/aarch32|arm32|arm|armv7|armv7a|armv7l|armv8l|arm-neon|armv7a-neon|aarch|ARM/:
+                return "arm"
+            case ~/x86_64|x64|amd64|AMD64|amd/:
+                return "x86_64"
+            case ~/x86|x86_32|IA32|ia32|intel32|i386|i486|i586|i686|intel/:
+                return "x86"
+            default:
+                return arch
+        }
+    }
+
+    /**
      * Detects device architecture and pushes the appropriate Busybox binary.
      */
     public void pushBusybox(String localBusyboxDir) {
-        println "Determining architecture..."
-        String arch = execForResult("uname -m").trim()
-        String targetArch = ""
-
-        switch (arch) {
-            case ~/aarch64|arm64|armv8|armv8a/:
-                targetArch = "arm64"
-                break
-            case ~/aarch32|arm32|arm|armv7|armv7a|armv7l|armv8l|arm-neon|armv7a-neon|aarch|ARM/:
-                targetArch = "arm"
-                break
-            case ~/x86_64|x64|amd64|AMD64|amd/:
-                targetArch = "x86_64"
-                break
-            case ~/x86|x86_32|IA32|ia32|intel32|i386|i486|i586|i686|intel/:
-                targetArch = "x86"
-                break
-            default:
-                throw new RuntimeException("Unrecognized architecture: ${arch}")
-        }
+        String targetArch = getArchitecture()
+        println "Detected device architecture: ${targetArch}"
 
         println "Pushing busybox for ${targetArch}..."
         String localPath = "${localBusyboxDir}/busybox-${targetArch}"

@@ -16,6 +16,7 @@ import com.android.ddmlib.IShellOutputReceiver
 
 import de.anddisa.adb.ADBCommander
 import de.anddisa.adb.entities.BackupPackage
+import de.anddisa.adb.util.BusyboxManager
 
 /**
  * ABP (Android Backup Project) - Groovy Version
@@ -80,10 +81,23 @@ class ABP {
             println "Warning: Root access not detected. Some operations may fail."
         }
 
-        // Push busybox - assuming it's in the parent directory relative to the project root
-        // In the typical setup, it would be in /media/ds/7d13d1f7-be33-4667-9b16-839f3c0f49e4/src/android-backup-project/busybox-ndk
-        String busyboxDir = "../busybox-ndk" 
-        adbc.pushBusybox(busyboxDir)
+        // Handle Busybox deployment
+        String arch = adbc.getArchitecture()
+        String busyboxDir = "./busybox-ndk" // Local cache directory
+        try {
+            BusyboxManager.ensureBusybox(arch, busyboxDir)
+            adbc.pushBusybox(busyboxDir)
+        } catch (Exception e) {
+            println "Error: Could not prepare Busybox: ${e.message}"
+            // Fallback to parent directory if available
+            String fallbackDir = "../busybox-ndk"
+            if (new File(fallbackDir).exists()) {
+                println "Attempting fallback to ${fallbackDir}..."
+                adbc.pushBusybox(fallbackDir)
+            } else {
+                System.exit(1)
+            }
+        }
 		
         // Target a specific device by its serial number
 		if (line.hasOption("serial")) {

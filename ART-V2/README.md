@@ -14,8 +14,7 @@ ART-V2 is a Groovy-based implementation of the Android Backup Project, providing
 ## Preconditions
 
 * `adb` installed and in execution path.
-* `busybox-ndk` binaries available in the parent directory (`../busybox-ndk/`).
-* Root access on the target device (Magisk recommended).
+* Root access on the target device either by adb insecure or e.g. Magisk
 * Java 21+ and Gradle.
 
 ## Usage
