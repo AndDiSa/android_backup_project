@@ -37,7 +37,7 @@ class BackupHandler extends BackupRestoreHandler {
 	void doImageBackup(String blockDevice) {
 		String[] parts = blockDevice.split("/")
 		FileReceiver frImg = new FileReceiver(localBackupDirectory + "${parts[parts.length - 1]}.img")
-		commander.execAsRootForResult("/dev/busybox stty raw; /dev/busybox dd if=${blockDevice} bs=4096 2>/dev/null", frImg, 15, TimeUnit.MINUTES)
+		commander.execAsRootForResult("${ADBCommander.BB} stty raw; ${ADBCommander.BB} dd if=${blockDevice} bs=4096 2>/dev/null", frImg, 15, TimeUnit.MINUTES)
 		frImg.flush()
 		if (frImg.isCancelled()) {
 			println "error while transferring file ..."
@@ -46,7 +46,7 @@ class BackupHandler extends BackupRestoreHandler {
             
             // Checksum verification
             println "Verifying image backup..."
-            String deviceChecksum = commander.execAsRootForResult("/dev/busybox sha256sum ${blockDevice}").split("\\s+")[0].trim()
+            String deviceChecksum = commander.execAsRootForResult("${ADBCommander.BB} sha256sum ${blockDevice}").split("\\s+")[0].trim()
             println "  Device checksum: ${deviceChecksum}"
             // We'd need a local sha256sum implementation or call system command
             // For now, just log the device checksum.
@@ -108,7 +108,7 @@ class BackupHandler extends BackupRestoreHandler {
         println "--- Processing: ${p.packageName} ---"
 		// Backup APK
 		FileReceiver frApp = new FileReceiver(localBackupDirectory + "app_${p.packageName}.tar.gz")
-		commander.execAsRootForResult("/dev/busybox stty raw; cd ${p.appDirectoryOnDevice} && /dev/busybox tar cfz - ./ 2>/dev/null", frApp, 15, TimeUnit.MINUTES)
+		commander.execAsRootForResult("${ADBCommander.BB} stty raw; ${ADBCommander.BB} tar -cz -C ${p.appDirectoryOnDevice} . 2>/dev/null", frApp, 15, TimeUnit.MINUTES)
 		frApp.flush()
 		if (frApp.isCancelled()) {
 			p.successful &= false
@@ -119,7 +119,7 @@ class BackupHandler extends BackupRestoreHandler {
 		}
 		// Backup Data
 		FileReceiver frData = new FileReceiver(localBackupDirectory + "data_${p.packageName}.tar.gz")
-		commander.execAsRootForResult("/dev/busybox stty raw; cd ${p.dataDirectoryOnDevice} && /dev/busybox tar cfz - ./ 2>/dev/null", frData, 15, TimeUnit.MINUTES)
+		commander.execAsRootForResult("${ADBCommander.BB} stty raw; ${ADBCommander.BB} tar -cz -C ${p.dataDirectoryOnDevice} . 2>/dev/null", frData, 15, TimeUnit.MINUTES)
 		frData.flush()
 		if (frData.isCancelled()) {
 			p.successful &= false
@@ -150,10 +150,10 @@ class BackupHandler extends BackupRestoreHandler {
 		FileReceiver frTar = new FileReceiver(localBackupDirectory + "${tarConfig}.tar.gz")
 		if (tarConfig.equals("data")) {
 			// Back up /data excluding media and mediadrm
-			commander.execAsRootForResult("/dev/busybox stty raw; cd /data; /dev/busybox tar czf - ./ --exclude=media --exclude=mediadrm 2>/dev/null", frTar, 15, TimeUnit.MINUTES)
+			commander.execAsRootForResult("${ADBCommander.BB} stty raw; ${ADBCommander.BB} tar -cz -C /data --exclude=media --exclude=mediadrm . 2>/dev/null", frTar, 15, TimeUnit.MINUTES)
 		} else if (tarConfig.equals("media")) {
 			// Back up media directories only
-			commander.execAsRootForResult("/dev/busybox stty raw; cd /data; /dev/busybox tar czf - ./media ./mediadrm 2>/dev/null", frTar, 15, TimeUnit.MINUTES)
+			commander.execAsRootForResult("${ADBCommander.BB} stty raw; ${ADBCommander.BB} tar -cz -C /data ./media ./mediadrm 2>/dev/null", frTar, 15, TimeUnit.MINUTES)
 	    }
 		frTar.flush()
 		if (frTar.isCancelled()) {

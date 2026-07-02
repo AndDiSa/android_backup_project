@@ -79,17 +79,10 @@ while IFS= read -r line <&3; do
 
     echo "--- Processing: $dataDir ---"
 
-    if [[ "$AS" == "$AROOT" ]]; then
-        echo "Backing up APK..."
-        $AS "/dev/busybox tar -cz -C \"$appDir\" . 2>/dev/null" | pv -trab > "app_${dataDir}.tar.gz"
-        echo "Backing up Data..."
-        $AS "/dev/busybox tar -cz -C \"$systemDataDir/$dataDir\" . 2>/dev/null" | pv -trab > "data_${dataDir}.tar.gz"
-    else
-        echo "Backing up APK (root)..."
-        $AS "cd \"$appDir\" && /dev/busybox tar czf - . 2>/dev/null" | pv -trab > "app_${dataDir}.tar.gz"
-        echo "Backing up Data (root)..."
-        $AS "cd \"$systemDataDir/$dataDir\" && /dev/busybox tar czf - . 2>/dev/null" | pv -trab > "data_${dataDir}.tar.gz"
-    fi
+    echo "Backing up APK..."
+    $AS "$BB stty raw; $BB tar -cz -C \"$appDir\" . 2>/dev/null" | pv -trab > "app_${dataDir}.tar.gz"
+    echo "Backing up Data..."
+    $AS "$BB stty raw; $BB tar -cz -C \"$systemDataDir/$dataDir\" . 2>/dev/null" | pv -trab > "data_${dataDir}.tar.gz"
 
 done 3< <(echo "$PACKAGES" | tr " " "\n")
 

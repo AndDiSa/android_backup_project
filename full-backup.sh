@@ -71,24 +71,13 @@ stopRuntime
 
 if $data_backup; then
     echo "Creating full tar backup of /data excluding /data/media"
-    if [[ "$AS" == "$AROOT" ]]; then
-        # Simple pipe
-    	$AS "/dev/busybox tar -cz -C /data --exclude='./media' --exclude='./mediadrm' --exclude='./user/0' . 2>/dev/null" | pv -trab > data.tar.gz
-    else
-        # Magisk version
-    	$AS "cd /data && /dev/busybox tar -czf - --exclude='./media' --exclude='./mediadrm' --exclude='./user/0' ./ 2>/dev/null" | pv -trab > data.tar.gz
-    fi
+    $AS "$BB stty raw; $BB tar -cz -C /data --exclude='./media' --exclude='./mediadrm' --exclude='./user/0' . 2>/dev/null" | pv -trab > data.tar.gz
 fi
 
 if $media_backup; then
     echo "Creating full tar backup of /data/media"
-    if [[ "$AS" == "$AROOT" ]]; then
-    	$AS "/dev/busybox tar -cz -C /data/media . 2>/dev/null" | pv -trab > data_media.tar.gz
-    	$AS "/dev/busybox tar -cz -C /data/mediadrm . 2>/dev/null" | pv -trab > data_mediadrm.tar.gz
-    else
-    	$AS "cd /data/media && /dev/busybox tar -czf - ./ 2>/dev/null" | pv -trab > data_media.tar.gz
-    	$AS "cd /data/mediadrm && /dev/busybox tar -czf - ./ 2>/dev/null" | pv -trab > data_mediadrm.tar.gz
-    fi
+    $AS "$BB stty raw; $BB tar -cz -C /data/media . 2>/dev/null" | pv -trab > data_media.tar.gz
+    $AS "$BB stty raw; $BB tar -cz -C /data/mediadrm . 2>/dev/null" | pv -trab > data_mediadrm.tar.gz
 fi
 
 if $image_backup; then
@@ -96,11 +85,11 @@ if $image_backup; then
     #get data image location
     PARTITION=$($AS mount | grep " /data " | cut -d ' ' -f1)
     echo "trying to get $PARTITION as data.img.gz"
-    $AS "/dev/busybox dd if=$PARTITION bs=16777216 2>/dev/null | /dev/busybox gzip" | pv -trab > data.img.gz
+    $AS "$BB dd if=$PARTITION bs=16777216 2>/dev/null | $BB gzip" | pv -trab > data.img.gz
 
     echo "Verifying image backup..."
     echo -n "  Calculate checksum on device: "
-    device_checksum="$($AS /dev/busybox sha256sum "$PARTITION" | cut -d ' ' -f1)"
+    device_checksum="$($AS $BB sha256sum "$PARTITION" | cut -d ' ' -f1)"
     echo "$device_checksum"
     echo -n "  Calculate checksum locally: "
     local_checksum="$(gzip -d < data.img.gz | sha256sum | cut -d ' ' -f1)"

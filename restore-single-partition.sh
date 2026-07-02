@@ -32,9 +32,9 @@ PARTITION="/dev/block/by-name/$2"
 echo "writing $1 to $PARTITION ..."
 if [[ "$1" == "*.gz" ]]
 then
-	zcat $1 2>/dev/null | pv -trab | $AS "/dev/busybox dd of=$PARTITION 2>/dev/null"
+	zcat $1 2>/dev/null | pv -trab | $AS "$BB dd of=$PARTITION 2>/dev/null"
 else
-	cat $1 2>/dev/null | pv -trab | $AS "/dev/busybox dd of=$PARTITION 2>/dev/null"
+	cat $1 2>/dev/null | pv -trab | $AS "$BB dd of=$PARTITION 2>/dev/null"
 fi
 
 cleanup

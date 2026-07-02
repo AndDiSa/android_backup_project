@@ -106,7 +106,7 @@ class RestoreHandler extends BackupRestoreHandler {
 				NativeDeviceStateMonitor stateMonitor = new NativeDeviceStateMonitor(mgr, commander.device, false)
 				NativeDevice nd = new NativeDevice(commander.device, stateMonitor, allocationMonitor)
 				// Stream local file contents into 'dd' on the device
-				nd.executeShellV2Command(getRootWrappedCommand("/dev/busybox dd of=${parts[0]} 2>/dev/null").toString(), f, baos, 5, TimeUnit.MINUTES, 1)
+				nd.executeShellV2Command(getRootWrappedCommand("${ADBCommander.BB} dd of=${parts[0]} 2>/dev/null").toString(), f, baos, 5, TimeUnit.MINUTES, 1)
 				baos.flush()
 				startRuntime()
 				println "... finished"
@@ -210,7 +210,7 @@ class RestoreHandler extends BackupRestoreHandler {
 			NativeDeviceStateMonitor stateMonitor = new NativeDeviceStateMonitor(mgr, commander.device, false)
 			NativeDevice nd = new NativeDevice(commander.device, stateMonitor, allocationMonitor)
 			// Stream local data archive into 'tar' on the device
-			nd.executeShellV2Command(getRootWrappedCommand("/dev/busybox tar xpzf - -C ${p.dataDirectoryOnDevice} 2>/dev/null").toString(), f, baos, 5, TimeUnit.MINUTES, 1)
+			nd.executeShellV2Command(getRootWrappedCommand("${ADBCommander.BB} stty raw; ${ADBCommander.BB} tar -xzpf - -C ${p.dataDirectoryOnDevice} . 2>/dev/null").toString(), f, baos, 5, TimeUnit.MINUTES, 1)
 			baos.flush()
 			println "... finished"
 			baos.close()
@@ -246,7 +246,7 @@ class RestoreHandler extends BackupRestoreHandler {
 		NativeDeviceStateMonitor stateMonitor = new NativeDeviceStateMonitor(mgr, commander.device, false)
 		NativeDevice nd = new NativeDevice(commander.device, stateMonitor, allocationMonitor)
 		// Stream the archive into 'tar' on the device
-		println nd.executeShellV2Command(getRootWrappedCommand("/dev/busybox tar xvzf - -C /data --exclude=./**/var/* --exclude=./**/run/* 2>&1").toString(), f)
+		println nd.executeShellV2Command(getRootWrappedCommand("${ADBCommander.BB} stty raw; ${ADBCommander.BB} tar -xvzf - -C /data --exclude=./**/var/* --exclude=./**/run/* 2>&1").toString(), f)
 		baos.flush()
 		println baos.toString()
 		println "... finished"

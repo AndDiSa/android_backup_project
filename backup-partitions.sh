@@ -76,11 +76,11 @@ if $image_backup; then
     for i in $PARTITIONS; do
     	PARTITION="/dev/block/by-name/$i"
     	echo "getting $PARTITION ..."
-    	$AS "/dev/busybox dd if=$PARTITION bs=4096 2>/dev/null" > $i.img
+    	$AS "$BB dd if=$PARTITION bs=4096 2>/dev/null" > $i.img
 
     	echo "Verifying image backup..."
     	echo -n "  Calculate checksum on device: "
-    	device_checksum="$($AS /dev/busybox sha256sum $PARTITION | cut -d ' ' -f1)"
+    	device_checksum="$($AS $BB sha256sum $PARTITION | cut -d ' ' -f1)"
     	echo "$device_checksum"
     	echo -n "  Calculate checksum locally: "
     	local_checksum="$(sha256sum $i.img | cut -d ' ' -f1)"

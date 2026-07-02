@@ -132,7 +132,7 @@ do
 	dataPackage=$(echo "$appPackage" | sed 's/app_/data_/')
     if [[ -f "$dataPackage" ]]; then
         echo "Restoring data from $dataPackage"
-        cat "$dataPackage" | pv -trab | $AS "/dev/busybox tar -xzpf - -C $systemDataDir/$dataDir"
+        cat "$dataPackage" | pv -trab | $AS "$BB tar -xzpf - -C $systemDataDir/$dataDir"
 
         # Surgical chown: Main User/Group
         $AS "chown -R $ID:$ID $systemDataDir/$dataDir"

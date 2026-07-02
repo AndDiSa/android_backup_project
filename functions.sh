@@ -13,6 +13,8 @@ AMAGISK2="adb shell su 0 -c "     # -- needed for magisk rooted devices (depends
 AMAGISK3="adb shell su -c "       # -- needed for magisk rooted devices (depends on su version installed)
 AROOT="adb shell "
 
+BB="/data/local/tmp/busybox"
+
 USER_ID=0
 USER_NAME=""
 
@@ -61,7 +63,7 @@ function resolveUserName()
 
 function cleanup()
 {
-	$AS "rm /dev/busybox"
+	$AS "rm $BB"
 }
 
 function checkForCleanData()
@@ -277,14 +279,14 @@ function pushBusybox()
 	esac
 
 	echo "Pushing busybox to device ($target_arch)..."
+	$A push "busybox-ndk/busybox-$target_arch" "$BB"
+	$AS "chmod 755 $BB"
 
-	$A push "busybox-ndk/busybox-$target_arch" /sdcard/busybox
-	$AS "mv /sdcard/busybox /dev/busybox"
-	$AS "chmod +x /dev/busybox"
-
-	if ! $AS "/dev/busybox >/dev/null"; then
-		echo "Busybox doesn't work here!"
-		exit 1
+	# Redirect both stdout AND stderr, and explicitly run a harmless applet 
+	# to confirm it's working natively.
+	if ! $AS "$BB true >/dev/null 2>&1"; then
+        	echo "Busybox doesn't work here!"
+	        exit 1
 	fi
 }
 

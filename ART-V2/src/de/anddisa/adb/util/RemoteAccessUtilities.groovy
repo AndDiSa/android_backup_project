@@ -16,7 +16,7 @@ class RemoteAccessUtilities {
 	}
 
 	def String cleanup() {
-		commander.exec("rm /dev/busybox")
+		commander.exec("rm ${ADBCommander.BB}")
 	}
 
 	def boolean checkForCleanData() {

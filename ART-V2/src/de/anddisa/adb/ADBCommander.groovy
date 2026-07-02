@@ -36,6 +36,9 @@ import java.util.regex.Pattern
  */
 public class ADBCommander {
 
+    /** Centralized Busybox path on the device */
+    public static final String BB = "/data/local/tmp/busybox"
+
 	/** Thread-safe collector for shell command output */
 	public ThreadLocal<TextResponseCollector> responseCollector = new ThreadLocal<TextResponseCollector>() {
 		@Override protected TextResponseCollector initialValue() { return new TextResponseCollector() }
@@ -199,13 +202,13 @@ public class ADBCommander {
         println "Pushing busybox for ${targetArch}..."
         String localPath = "${localBusyboxDir}/busybox-${targetArch}"
         try {
-            device.pushFile(localPath, "/sdcard/busybox")
-            execAsRoot("mv /sdcard/busybox /dev/busybox")
-            execAsRoot("chmod +x /dev/busybox")
+            device.pushFile(localPath, "/data/local/tmp/busybox_tmp")
+            execAsRoot("mv /data/local/tmp/busybox_tmp ${BB}")
+            execAsRoot("chmod +x ${BB}")
             
-            String version = execAsRootForResult("/dev/busybox --help") ?: ""
+            String version = execAsRootForResult("${BB} --help") ?: ""
             if (version.contains("BusyBox")) {
-                println "Busybox deployed successfully to /dev/busybox"
+                println "Busybox deployed successfully to ${BB}"
             } else {
                 throw new RuntimeException("Busybox deployment failed: Help output invalid")
             }

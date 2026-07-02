@@ -86,7 +86,7 @@ pushd "$RESTOREDIR" > /dev/null
 if $data_backup; then
     echo "Restoring full tar backup of /data excluding /data/media ... "
     if [[ -f data.tar.gz ]]; then
-        cat data.tar.gz | pv -trab | $AS '/dev/busybox tar -xzpf - -C /data --exclude=./vendor/var/run || true'
+        cat data.tar.gz | pv -trab | $AS "$BB tar -xzpf - -C /data --exclude=./vendor/var/run || true"
         $AS "restorecon -FRDv /data/data"
     else
         echo "data.tar.gz not found!"
@@ -98,12 +98,12 @@ if $media_backup; then
     echo "Restoring full tar backup of /data/media ... "
     if [[ -f data_media.tar.gz ]]; then
         $AS mkdir -p /data/media
-        cat data_media.tar.gz | pv -trab | $AS '/dev/busybox tar -xzpf - -C /data/media --exclude=./vendor/var/run || true'
+        cat data_media.tar.gz | pv -trab | $AS "$BB tar -xzpf - -C /data/media --exclude=./vendor/var/run || true"
     fi
     echo "Restoring full tar backup of /data/mediadrm ... "
     if [[ -f data_mediadrm.tar.gz ]]; then
         $AS mkdir -p /data/mediadrm
-        cat data_mediadrm.tar.gz | pv -trab | $AS '/dev/busybox tar -xzpf - -C /data/mediadrm --exclude=./vendor/var/run || true'
+        cat data_mediadrm.tar.gz | pv -trab | $AS "$BB tar -xzpf - -C /data/mediadrm --exclude=./vendor/var/run || true"
     fi
 fi
 
@@ -113,7 +113,7 @@ if $image_backup; then
         #get data image location
         PARTITION=$($AS mount | grep " /data " | cut -d ' ' -f1)
         echo "Restoring to $PARTITION"
-        zcat data.img.gz | pv -trab | $AS "/dev/busybox dd of=$PARTITION 2>/dev/null || true"
+        zcat data.img.gz | pv -trab | $AS "$BB dd of=$PARTITION 2>/dev/null || true"
     else
         echo "data.img.gz not found!"
     fi
