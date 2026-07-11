@@ -12,9 +12,11 @@ import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream
 import org.apache.commons.compress.utils.IOUtils
 
 import de.anddisa.adb.entities.BackupPackage
+import de.anddisa.adb.util.RemoteAccessUtilities
 
 class BackupRestoreHandler {
 	ADBCommander commander
+	RemoteAccessUtilities remoteUtils
 	String localBackupDirectory = "/tmp/1/"
 	List<BackupPackage> packages = []
     int userId = 0
@@ -126,17 +128,17 @@ class BackupRestoreHandler {
 
 	public BackupRestoreHandler(ADBCommander commander) {
 		this.commander = commander
+		this.remoteUtils = new RemoteAccessUtilities(commander)
 	}
 	
 	void stopRuntime() {
-		println "stopping runtime (to prevent parallel modification)..."
-		println commander.execAsRootForResult("stop")
+		remoteUtils.stopAllApps()
+		remoteUtils.stopRuntime()
 		Thread.sleep(10000)
 	}
 
 	void startRuntime() {
-		println "starting runtime ..."
-		println commander.execAsRootForResult("start")
+		remoteUtils.startRuntime()
 	}
 
 	List<String> decompress(String tarFileName, File out, String filter) throws IOException {

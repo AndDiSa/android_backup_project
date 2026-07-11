@@ -52,7 +52,7 @@ class Test {
 		// deal with busybox (tar)
 		//
 		FileReceiver fr = new FileReceiver("/tmp/tmp.tgz")
-		adbc.execForResult("su 0 -c '${ADBCommander.BB} stty raw; ${ADBCommander.BB} tar -cz -C /system/etc . 2>/dev/null'", fr, 15, TimeUnit.MINUTES)
+		adbc.execForResult("su 0 -c '${ADBCommander.BB} tar -cz -C /system/etc . 2>/dev/null'", fr, 15, TimeUnit.MINUTES)
 		fr.flush()
 		if (fr.isCancelled()) {
 			println "error while transferring file"
@@ -64,7 +64,7 @@ class Test {
 		// deal with busybox (dd)
 		//
 		FileReceiver fr2 = new FileReceiver("/tmp/partition.img")
-		adbc.execForResult("su 0 -c '${ADBCommander.BB} stty raw; ${ADBCommander.BB} dd if=/dev/block/dm-3 bs=4096 2>/dev/null'", fr2, 15, TimeUnit.MINUTES)
+		adbc.execForResult("su 0 -c '${ADBCommander.BB} dd if=/dev/block/dm-3 bs=4096 2>/dev/null'", fr2, 15, TimeUnit.MINUTES)
 		fr2.flush()
 		if (fr2.isCancelled()) {
 			println "error while transferring file"

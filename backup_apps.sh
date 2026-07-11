@@ -62,8 +62,6 @@ $A shell "pm list packages --user $USER_ID -i ${PM_FLAGS/-f/}" | tr -d '\r' > "i
 # Get the list of packages with their APK paths (-f) and data directory names
 PACKAGES=$($A shell "pm list packages --user $USER_ID $PM_FLAGS")
 
-stopRuntime
-
 echo "## Pull apps"
 
 # Use a separate file descriptor (3) for the loop input.
@@ -78,15 +76,16 @@ while IFS= read -r line <&3; do
     systemDataDir=$(getSystemDataDir)
 
     echo "--- Processing: $dataDir ---"
+    # 1. Gracefully terminate the app to commit databases to disk
+    $AS "am force-stop $dataDir"
 
     echo "Backing up APK..."
-    $AS "$BB stty raw; $BB tar -cz -C \"$appDir\" . 2>/dev/null" | pv -trab > "app_${dataDir}.tar.gz"
+    $AS "$BB tar -cz -C \"$appDir\" . 2>/dev/null" | pv -trab > "app_${dataDir}.tar.gz"
     echo "Backing up Data..."
-    $AS "$BB stty raw; $BB tar -cz -C \"$systemDataDir/$dataDir\" . 2>/dev/null" | pv -trab > "data_${dataDir}.tar.gz"
+    $AS "$BB tar -cz -C \"$systemDataDir/$dataDir\" . 2>/dev/null" | pv -trab > "data_${dataDir}.tar.gz"
 
 done 3< <(echo "$PACKAGES" | tr " " "\n")
 
 cleanup
 
-startRuntime
 popd > /dev/null

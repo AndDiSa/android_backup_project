@@ -300,6 +300,26 @@ function startRuntime()
 	echo "## Restart Runtime" && $AS start
 }
 
+function stopAllApps()
+{
+    echo "## Force-stopping all applications for all users..."
+    # Get all user IDs
+    local users
+    users=$($A shell pm list users | grep "UserInfo" | cut -d "{" -f2 | cut -d ":" -f1)
+
+    for uid in $users; do
+        echo "   Processing User $uid..."
+        # Get all packages for this user
+        local pkgs
+        pkgs=$($A shell pm list packages --user "$uid" | cut -d ":" -f2)
+        for pkg in $pkgs; do
+            # We don't need to wait for each one, so we can background or just run fast
+            $AS "am force-stop --user $uid $pkg"
+        done
+    done
+    echo "## All applications stopped."
+}
+
 function updateBusybox()
 {
 	if [ ! -d busybox-ndk ]; then

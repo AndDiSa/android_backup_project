@@ -12,6 +12,7 @@ data_backup=true
 media_backup=false
 image_backup=false
 extra_backup=false
+graceful=false
 
 if [[ $# -gt 0 ]]; then
     for param in $@; do
@@ -19,6 +20,10 @@ if [[ $# -gt 0 ]]; then
             help|-h|--help)
                 echo "Makes a full backup over ADB"
                 echo "tar /data, binary img /data block"
+                echo ""
+                echo "Options:"
+                echo "  --graceful          Don't stop the Android framework (uses force-stop on all apps)"
+                echo "                      WARNING: Live backup of mounted partitions may be corrupt!"
                 exit 0
                 ;;
             --data-backup)
@@ -45,6 +50,9 @@ if [[ $# -gt 0 ]]; then
             --no-extra-backup)
                 extra_backup=false
                 ;;
+            --graceful)
+                graceful=true
+                ;;
             *)
                 echo "Unknown argument $1"
                 exit 1
@@ -69,7 +77,14 @@ pushd "$DIR"
 PARTITIONS=$($A shell "ls /dev/block/by-name/")
 echo $PARTITIONS
 
-stopRuntime 
+if $graceful; then
+    stopAllApps
+    echo "WARNING: Partition image backup requested with --graceful."
+    echo "A live backup of a mounted filesystem may result in corruption!"
+    sleep 5
+else
+    stopRuntime
+fi
 
 if $image_backup; then
     echo "Creating partition image backups ..."
@@ -96,7 +111,9 @@ fi
 
 cleanup
 
-startRuntime
+if ! $graceful; then
+    startRuntime
+fi
 
 popd # $DIR
 

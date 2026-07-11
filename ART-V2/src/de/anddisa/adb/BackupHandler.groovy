@@ -32,12 +32,11 @@ class BackupHandler extends BackupRestoreHandler {
 
 	/**
 	 * Backs up a raw partition image using 'dd'.
-	 * Uses 'stty raw' to ensure binary data isn't corrupted by terminal settings.
 	 */
 	void doImageBackup(String blockDevice) {
 		String[] parts = blockDevice.split("/")
 		FileReceiver frImg = new FileReceiver(localBackupDirectory + "${parts[parts.length - 1]}.img")
-		commander.execAsRootForResult("${ADBCommander.BB} stty raw; ${ADBCommander.BB} dd if=${blockDevice} bs=4096 2>/dev/null", frImg, 15, TimeUnit.MINUTES)
+		commander.execAsRootForResult("${ADBCommander.BB} dd if=${blockDevice} bs=4096 2>/dev/null", frImg, 15, TimeUnit.MINUTES)
 		frImg.flush()
 		if (frImg.isCancelled()) {
 			println "error while transferring file ..."
@@ -74,7 +73,7 @@ class BackupHandler extends BackupRestoreHandler {
 
 	/**
 	 * Backs up selected application packages (APK and data).
-	 * Temporarily stops the Android runtime to ensure data consistency.
+	 * Does NOT stop the runtime, only force-stops individual apps during their backup.
 	 */
 	void doPackageBackup() {
 		File f = new File(localBackupDirectory)
@@ -91,13 +90,11 @@ class BackupHandler extends BackupRestoreHandler {
 			}
 		}
 		println "starting backup ..."
-		stopRuntime() // Equivalent to 'adb shell stop'
 		for (BackupPackage p : packages) {
 			 if (p.selected) {
 				 doPackageBackup(p)
 			 }
 	    }
-		startRuntime() // Equivalent to 'adb shell start'
 		println "... backup finished"
 	}
 
@@ -108,7 +105,8 @@ class BackupHandler extends BackupRestoreHandler {
         println "--- Processing: ${p.packageName} ---"
 		// Backup APK
 		FileReceiver frApp = new FileReceiver(localBackupDirectory + "app_${p.packageName}.tar.gz")
-		commander.execAsRootForResult("${ADBCommander.BB} stty raw; ${ADBCommander.BB} tar -cz -C ${p.appDirectoryOnDevice} . 2>/dev/null", frApp, 15, TimeUnit.MINUTES)
+		commander.execAsRootForResult("${ADBCommander.BB} force-stop  ${p.packageName}", frApp, 15, TimeUnit.MINUTES)
+		commander.execAsRootForResult("${ADBCommander.BB} tar -cz -C ${p.appDirectoryOnDevice} . 2>/dev/null", frApp, 15, TimeUnit.MINUTES)
 		frApp.flush()
 		if (frApp.isCancelled()) {
 			p.successful &= false
@@ -119,7 +117,7 @@ class BackupHandler extends BackupRestoreHandler {
 		}
 		// Backup Data
 		FileReceiver frData = new FileReceiver(localBackupDirectory + "data_${p.packageName}.tar.gz")
-		commander.execAsRootForResult("${ADBCommander.BB} stty raw; ${ADBCommander.BB} tar -cz -C ${p.dataDirectoryOnDevice} . 2>/dev/null", frData, 15, TimeUnit.MINUTES)
+		commander.execAsRootForResult("${ADBCommander.BB} tar -cz -C ${p.dataDirectoryOnDevice} . 2>/dev/null", frData, 15, TimeUnit.MINUTES)
 		frData.flush()
 		if (frData.isCancelled()) {
 			p.successful &= false
@@ -135,11 +133,9 @@ class BackupHandler extends BackupRestoreHandler {
 	 */
 	void doTarBackup(String[] tarConfigs) {
 		println "starting backup ..."
-		stopRuntime()
 		if (tarConfigs != null) {
 			tarConfigs.each { doTarBackup( it ) }
 		}
-		startRuntime()
 		println "... backup finished"
 	}
 
@@ -150,10 +146,10 @@ class BackupHandler extends BackupRestoreHandler {
 		FileReceiver frTar = new FileReceiver(localBackupDirectory + "${tarConfig}.tar.gz")
 		if (tarConfig.equals("data")) {
 			// Back up /data excluding media and mediadrm
-			commander.execAsRootForResult("${ADBCommander.BB} stty raw; ${ADBCommander.BB} tar -cz -C /data --exclude=media --exclude=mediadrm . 2>/dev/null", frTar, 15, TimeUnit.MINUTES)
+			commander.execAsRootForResult("${ADBCommander.BB} tar -cz -C /data --exclude=media --exclude=mediadrm . 2>/dev/null", frTar, 15, TimeUnit.MINUTES)
 		} else if (tarConfig.equals("media")) {
 			// Back up media directories only
-			commander.execAsRootForResult("${ADBCommander.BB} stty raw; ${ADBCommander.BB} tar -cz -C /data ./media ./mediadrm 2>/dev/null", frTar, 15, TimeUnit.MINUTES)
+			commander.execAsRootForResult("${ADBCommander.BB} tar -cz -C /data ./media ./mediadrm 2>/dev/null", frTar, 15, TimeUnit.MINUTES)
 	    }
 		frTar.flush()
 		if (frTar.isCancelled()) {

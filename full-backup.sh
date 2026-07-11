@@ -12,12 +12,18 @@ data_backup=true
 media_backup=false
 image_backup=false
 extra_backup=false
+graceful=false
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         help|-h|--help)
             echo "Makes a full backup over ADB"
             echo "tar /data, binary img /data block"
+            echo ""
+            echo "Options:"
+            echo "  --graceful          Don't stop the Android framework (uses force-stop on all apps)"
+            echo "                      Recommended for file-level backups (tar) to avoid dropping"
+            echo "                      encryption keys on some devices."
             exit 0
             ;;
         --data-backup)
@@ -44,6 +50,9 @@ while [[ $# -gt 0 ]]; do
         --no-extra-backup)
             extra_backup=false
             ;;
+        --graceful)
+            graceful=true
+            ;;
         *)
             echo "Unknown argument $1"
             exit 1
@@ -67,17 +76,26 @@ pushBusybox
 mkBackupDir
 pushd "$DIR" > /dev/null
 
-stopRuntime
+if $graceful; then
+    stopAllApps
+    if $image_backup; then
+        echo "WARNING: Partition image backup requested with --graceful."
+        echo "A live backup of a mounted filesystem may result in corruption!"
+        sleep 5
+    fi
+else
+    stopRuntime
+fi
 
 if $data_backup; then
     echo "Creating full tar backup of /data excluding /data/media"
-    $AS "$BB stty raw; $BB tar -cz -C /data --exclude='./media' --exclude='./mediadrm' --exclude='./user/0' . 2>/dev/null" | pv -trab > data.tar.gz
+    $AS "$BB tar -cz -C /data --exclude='./media' --exclude='./mediadrm' --exclude='./user/0' . 2>/dev/null" | pv -trab > data.tar.gz
 fi
 
 if $media_backup; then
     echo "Creating full tar backup of /data/media"
-    $AS "$BB stty raw; $BB tar -cz -C /data/media . 2>/dev/null" | pv -trab > data_media.tar.gz
-    $AS "$BB stty raw; $BB tar -cz -C /data/mediadrm . 2>/dev/null" | pv -trab > data_mediadrm.tar.gz
+    $AS "$BB tar -cz -C /data/media . 2>/dev/null" | pv -trab > data_media.tar.gz
+    $AS "$BB tar -cz -C /data/mediadrm . 2>/dev/null" | pv -trab > data_mediadrm.tar.gz
 fi
 
 if $image_backup; then
@@ -104,7 +122,9 @@ fi
 
 cleanup
 
-startRuntime
+if ! $graceful; then
+    startRuntime
+fi
 
 popd > /dev/null
 

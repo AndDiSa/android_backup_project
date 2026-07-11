@@ -40,11 +40,34 @@ class RemoteAccessUtilities {
 		// to be done ...
 	}
 
+	def void stopAllApps() {
+		println "## Force-stopping all applications for all users..."
+		String usersList = commander.execForResult("pm list users")
+		// UserInfo{0:Owner:13} running
+		usersList.eachLine { line ->
+			def matcher = line =~ /UserInfo\{(\d+):/
+			if (matcher.find()) {
+				def uid = matcher.group(1)
+				println "   Processing User $uid..."
+				String pkgs = commander.execForResult("pm list packages --user $uid")
+				pkgs.eachLine { pkgLine ->
+					if (pkgLine.startsWith("package:")) {
+						def pkg = pkgLine.substring(8)
+						commander.execAsRoot("am force-stop --user $uid $pkg")
+					}
+				}
+			}
+		}
+		println "## All applications stopped."
+	}
+
 	def void stopRuntime() {
-		commander.exec("stop")
+		println "## Stop Runtime"
+		commander.execAsRoot("stop")
 	}
 
 	def void startRuntime() {
-		commander.exec("start")
+		println "## Restart Runtime"
+		commander.execAsRoot("start")
 	}
 }

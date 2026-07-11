@@ -123,7 +123,7 @@ Example: `./restore_one_splitted_app.sh sargo_backup --user Island app_com.examp
 
 ### full-backup.sh
 
-./full-backup.sh [--data-backup][--no-data-backup][--media-backup][--no-media-backup][--image-backup][--no-image-backup]
+./full-backup.sh [--data-backup][--no-data-backup][--media-backup][--no-media-backup][--image-backup][--no-image-backup] [--graceful]
 
 This script does a full backup of (different parts of) the /data partition. There
 are several options to control the behaviour.
@@ -134,9 +134,28 @@ are several options to control the behaviour.
 
 --image-backup will backup the whole partition which is mounted as /data as a 1:1 copy
 
+--graceful will not stop the Android framework but instead force-stop all apps.
+This is recommended for file-level backups (tar) to avoid issues with encryption
+keys being dropped on some devices.
+
 As it cannot be guaranteed that during the backup process there will be no single modification
 on the /data partition it's quite common to get a checksum validation failure after the
 backup is finished.
+
+
+### Important Note on Encryption (FBE)
+
+Modern Android devices use **File-Based Encryption (FBE)**. This has significant 
+implications for backups:
+
+1. **Partition Backups (`--image-backup`)**: These are raw block-level copies 
+   (ciphertext). Because encryption keys are tied to the device's hardware (TEE/SE), 
+   a partition image of `/data` is **not portable** and can only be restored to the 
+   exact same device.
+2. **Framework Stop**: Stopping the Android runtime (`stop`) can sometimes trigger 
+   the kernel to purge encryption keys from memory. If this happens, file-level 
+   backups (`tar`) will fail. Use the `--graceful` flag to keep the framework running 
+   while stopping apps to ensure keys remain available.
 
 
 ### full-restore.sh
