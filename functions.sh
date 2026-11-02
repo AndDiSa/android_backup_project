@@ -82,7 +82,7 @@ function checkForCleanData()
 
 function checkPrerequisites()
 {
-	local deps=("adb" "git" "tar" "wc" "tr" "sed" "rev" "cut" "gzip" "pv")
+	local deps=("adb" "tar" "wc" "tr" "sed" "rev" "cut" "gzip" "pv")
 	for dep in "${deps[@]}"; do
 		if ! command -v "$dep" >/dev/null 2>&1; then
 			echo "$dep not found, please install $dep"
@@ -305,6 +305,44 @@ function restorePackageData()
     return 0
 }
 
+function ensureBusybox()
+{
+	local target_arch="$1"
+	local local_dir="busybox-ndk"
+	local binary_name="busybox-$target_arch"
+	local local_file="$local_dir/$binary_name"
+	local repo_url="https://raw.githubusercontent.com/Magisk-Modules-Repo/busybox-ndk/master/"
+
+	mkdir -p "$local_dir"
+
+	if [[ -s "$local_file" ]]; then
+		return 0
+	fi
+
+	echo "Busybox binary not found locally. Downloading $binary_name from GitHub..."
+	local tmp_file="${local_file}.tmp"
+	if command -v curl >/dev/null 2>&1; then
+		if ! curl -fL "${repo_url}${binary_name}" -o "$tmp_file"; then
+			rm -f "$tmp_file"
+			echo "Error: Failed to download $binary_name via curl"
+			exit 1
+		fi
+	elif command -v wget >/dev/null 2>&1; then
+		if ! wget -O "$tmp_file" "${repo_url}${binary_name}"; then
+			rm -f "$tmp_file"
+			echo "Error: Failed to download $binary_name via wget"
+			exit 1
+		fi
+	else
+		echo "Error: Neither curl nor wget found to download $binary_name"
+		exit 1
+	fi
+
+	mv "$tmp_file" "$local_file"
+	chmod +x "$local_file"
+	echo "Download complete: $local_file"
+}
+
 function pushBusybox()
 {
 	echo "Determining architecture..."
@@ -334,6 +372,8 @@ function pushBusybox()
 			exit 1
 			;;
 	esac
+
+	ensureBusybox "$target_arch"
 
 	echo "Pushing busybox to device ($target_arch)..."
 	$A push "busybox-ndk/busybox-$target_arch" "$BB"
@@ -379,12 +419,8 @@ function stopAllApps()
 
 function updateBusybox()
 {
-	if [ ! -d busybox-ndk ]; then
-		git clone https://github.com/Magisk-Modules-Repo/busybox-ndk
-	else
-		pushd busybox-ndk > /dev/null
-		git pull
-		popd > /dev/null
-	fi
+	# Kept for backward compatibility; pushBusybox now downloads only the required
+	# architecture binary on demand via ensureBusybox (aligned with ART-V2 BusyboxManager).
+	mkdir -p busybox-ndk
 }
 

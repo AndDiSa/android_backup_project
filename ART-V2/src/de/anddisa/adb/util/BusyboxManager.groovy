@@ -25,20 +25,23 @@ class BusyboxManager {
         String binaryName = "busybox-${arch}"
         File localFile = new File(dir, binaryName)
 
-        if (localFile.exists()) {
+        if (localFile.exists() && localFile.length() > 0) {
             return localFile.absolutePath
         }
 
         println "Busybox binary not found locally. Downloading ${binaryName} from GitHub..."
+        File tmpFile = new File(dir, "${binaryName}.tmp")
         try {
             URI uri = new URI("${REPO_URL}${binaryName}")
             uri.toURL().withInputStream { is ->
-                Files.copy(is, localFile.toPath(), StandardCopyOption.REPLACE_EXISTING)
+                Files.copy(is, tmpFile.toPath(), StandardCopyOption.REPLACE_EXISTING)
             }
+            Files.move(tmpFile.toPath(), localFile.toPath(), StandardCopyOption.REPLACE_EXISTING)
             localFile.setExecutable(true)
             println "Download complete: ${localFile.absolutePath}"
             return localFile.absolutePath
         } catch (Exception e) {
+            tmpFile.delete()
             throw new RuntimeException("Failed to download busybox binary: ${e.message}", e)
         }
     }
