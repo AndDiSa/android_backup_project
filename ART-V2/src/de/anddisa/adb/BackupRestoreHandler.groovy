@@ -58,22 +58,20 @@ class BackupRestoreHandler {
                 .required(false)
                 .build())
 
-		OptionGroup location = new OptionGroup()
-		location.addOption(Option.builder("bd")
+		options.addOption(Option.builder("bd")
 				.longOpt("baseDir")
 				.desc("base directory to backup to / restore from (default: current directory)")
 				.hasArg()
 				.build())
-		location.addOption(Option.builder("cs")
+		options.addOption(Option.builder("cs")
 				.longOpt("createSubfolder")
 				.desc("create subfolder 'yyyy-MM-dd' in <baseDir> for storing the backup data")
 				.build())
-		location.addOption(Option.builder("td")
+		options.addOption(Option.builder("td")
 				.longOpt("tmpDir")
 				.desc("directory for temporary files (default: current directory)")
 				.hasArg()
 				.build())
-		options.addOptionGroup(location)
 
 		OptionGroup commands = new OptionGroup()
 		commands.addOption(Option.builder("b")
@@ -88,7 +86,7 @@ class BackupRestoreHandler {
 				.longOpt("devices")
 				.desc("list available devices through adb")
 				.build())
-		commands.addOption(Option.builder("i")
+		commands.addOption(Option.builder("in")
 				.longOpt("info")
 				.desc("dump device info of selected device")
 				.build())
@@ -109,13 +107,13 @@ class BackupRestoreHandler {
 				.longOpt("image")
 				.desc("backup / restore partition images (optional: list specific partitions)")
 				.hasArgs()
+				.optionalArg(true)
 				.build())
 		mode.addOption(Option.builder("t")
 				.longOpt("tar")
 				.desc("backup / restore tar files")
 				.hasArgs()
 				.build())
-		mode.setRequired(true)
 		options.addOptionGroup(mode)
 
 		return options
@@ -179,24 +177,26 @@ class BackupRestoreHandler {
         if (!includeSystem) {
             pmFlags += " -3"
         }
-		String[] allPackages = commander.execForResult("pm list packages --user ${userId} ${pmFlags}").split(System.lineSeparator())
+		String[] allPackages = commander.execForResult("pm list packages --user ${userId} ${pmFlags}").split("\\r?\\n")
         
         // Fetch installer info: pm list packages -i
         Map<String, String> installers = [:]
         String installerOutput = commander.execForResult("pm list packages --user ${userId} -i ${pmFlags.replace('-f', '')}")
-        installerOutput.split(System.lineSeparator()).each { line ->
+        installerOutput.split("\\r?\\n").each { line ->
+            line = line.trim()
             if (line.startsWith("package:")) {
                 // Format: package:com.example.app  installer=com.android.vending
                 def parts = line.replace("package:", "").split("\\s+installer=")
                 if (parts.length == 2) {
-                    installers[parts[0]] = parts[1]
+                    installers[parts[0].trim()] = parts[1].trim()
                 } else if (parts.length == 1) {
-                    installers[parts[0]] = "null"
+                    installers[parts[0].trim()] = "null"
                 }
             }
         }
 
 		for (String p : allPackages) {
+            p = p.trim()
             if (!p.startsWith("package:")) continue
 			def pathConfig = p.replace("package:", "")
 			def index = pathConfig.lastIndexOf("=")

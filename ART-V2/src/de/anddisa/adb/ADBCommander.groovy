@@ -159,7 +159,7 @@ public class ADBCommander {
         }
 
         // Try different su variants
-        String[] suVariants = ["su 0 -c", "su -c", "su root"]
+        String[] suVariants = ["su -c", "su 0 -c", "su root"]
         for (String su : suVariants) {
             result = execForResult("${su} whoami").trim()
             if (result == "root") {
@@ -204,7 +204,7 @@ public class ADBCommander {
         try {
             device.pushFile(localPath, "/data/local/tmp/busybox_tmp")
             execAsRoot("mv /data/local/tmp/busybox_tmp ${BB}")
-            execAsRoot("chmod +x ${BB}")
+            execAsRoot("chmod 755 ${BB}")
             
             String version = execAsRootForResult("${BB} --help") ?: ""
             if (version.contains("BusyBox")) {

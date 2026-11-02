@@ -60,7 +60,7 @@ echo "## Capturing installer metadata"
 $A shell "pm list packages --user $USER_ID -i ${PM_FLAGS/-f/}" | tr -d '\r' > "installers.txt"
 
 # Get the list of packages with their APK paths (-f) and data directory names
-PACKAGES=$($A shell "pm list packages --user $USER_ID $PM_FLAGS")
+PACKAGES=$($A shell "pm list packages --user $USER_ID $PM_FLAGS" | tr -d '\r')
 
 echo "## Pull apps"
 
@@ -77,7 +77,7 @@ while IFS= read -r line <&3; do
 
     echo "--- Processing: $dataDir ---"
     # 1. Gracefully terminate the app to commit databases to disk
-    $AS "am force-stop $dataDir"
+    $AS "am force-stop --user $USER_ID $dataDir"
 
     echo "Backing up APK..."
     $AS "$BB tar -cz -C \"$appDir\" . 2>/dev/null" | pv -trab > "app_${dataDir}.tar.gz"

@@ -111,7 +111,7 @@ if $image_backup; then
     echo "Restoring image backup..."
     if [[ -f data.img.gz ]]; then
         #get data image location
-        PARTITION=$($AS mount | grep " /data " | cut -d ' ' -f1)
+        PARTITION=$($AS mount | tr -d '\r' | grep " /data " | cut -d ' ' -f1)
         echo "Restoring to $PARTITION"
         zcat data.img.gz | pv -trab | $AS "$BB dd of=$PARTITION 2>/dev/null || true"
     else

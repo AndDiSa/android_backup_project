@@ -8,10 +8,10 @@ if [[ -n "$ADB_SERIAL" ]]; then
     A="adb -s $ADB_SERIAL"
 fi
 
-AMAGISK="adb shell su root "      # -- needed for magisk rooted devices
-AMAGISK2="adb shell su 0 -c "     # -- needed for magisk rooted devices (depends on su version installed)
-AMAGISK3="adb shell su -c "       # -- needed for magisk rooted devices (depends on su version installed)
-AROOT="adb shell "
+AMAGISK="$A shell su root "      # -- needed for magisk rooted devices
+AMAGISK2="$A shell su 0 -c "     # -- needed for magisk rooted devices (depends on su version installed)
+AMAGISK3="$A shell su -c "       # -- needed for magisk rooted devices (depends on su version installed)
+AROOT="$A shell "
 
 BB="/data/local/tmp/busybox"
 
@@ -37,7 +37,7 @@ function resolveUserId()
 	# This handles work profiles which might have names like "Island" or "Work Profile"
 	# Example output: UserInfo{10: Island :1030} running
 	local user_line
-	user_line=$($A shell pm list users | grep -i ":[[:space:]]*$identifier[[:space:]]*:")
+	user_line=$($A shell pm list users | tr -d '\r' | grep -i ":[[:space:]]*$identifier[[:space:]]*:")
 	if [[ -n "$user_line" ]]; then
 		# Extract ID between { and :
 		USER_ID=$(echo "$user_line" | cut -d "{" -f2 | cut -d ":" -f1)
@@ -54,7 +54,7 @@ function resolveUserName()
 {
     # Example output: UserInfo{10: Island :1030} running
     local user_line
-    user_line=$($A shell pm list users | grep "^[[:space:]]*UserInfo{$USER_ID:")
+    user_line=$($A shell pm list users | tr -d '\r' | grep "^[[:space:]]*UserInfo{$USER_ID:")
     if [[ -n "$user_line" ]]; then
         # Extract name between : and :
         USER_NAME=$(echo "$user_line" | cut -d ":" -f2 | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
@@ -214,6 +214,9 @@ function getInstaller()
 {
     local pkg="$1"
     local installers_file="installers.txt"
+    if [[ ! -f "$installers_file" && -n "$DIR" && -f "$DIR/installers.txt" ]]; then
+        installers_file="$DIR/installers.txt"
+    fi
     if [[ -f "$installers_file" ]]; then
         # Example line: package:com.example.app  installer=com.android.vending
         # We use a strict match to avoid partial package name matches
@@ -242,10 +245,64 @@ function clearAppData()
         # On some Managed Profiles (Work Profiles), the Profile Owner may prevent 'pm clear'.
         # In such cases, we fall back to a manual recursive deletion of contents.
         echo "WARNING: pm clear failed for $pkg (likely Profile Owner protection). Attempting manual purge..."
+        $AS "am force-stop --user $USER_ID $pkg" || :
         # Manually delete subdirectories and files, but keep the package root directory to preserve base permissions
         $AS "find $systemDataDir/$pkg -mindepth 1 -maxdepth 1 -exec rm -rf {} +" || :
         echo "Manual purge of $pkg data complete."
     fi
+}
+
+function restorePackageData()
+{
+    local appPrefix="$1"
+    local dataPackage="$2"
+    local dataDir="$appPrefix"
+    local systemDataDir
+    systemDataDir=$(getSystemDataDir)
+
+    echo "## Now installing app data"
+    clearAppData "$appPrefix" "$systemDataDir"
+    sleep 1
+
+    echo "Attempting to restore data for $appPrefix (User $USER_ID)"
+    # figure out current app user id
+    local L
+    L=( $($AS ls -d -l "$systemDataDir/$dataDir" 2>/dev/null | tr -d '\r') ) || :
+    # drwx------ 10 u0_a240 u0_a240 4096 2017-12-10 13:45 .
+    # => return u0_a240
+    local ID="${L[2]}"
+
+    if [[ -z "$ID" ]]; then
+        echo "Error: $appPrefix still not installed or data dir $systemDataDir/$dataDir not created"
+        return 1
+    fi
+
+    echo "APP User id is $ID"
+
+    if [[ -f "$dataPackage" ]]; then
+        echo "Restoring data from $dataPackage"
+        cat "$dataPackage" | pv -trab | $AS "$BB tar -xzpf - -C $systemDataDir/$dataDir"
+
+        # Surgical chown: Main User/Group
+        $AS "chown -R $ID:$ID $systemDataDir/$dataDir"
+
+        # Surgical chown: Cache Group (if exists)
+        # Android uses a special _cache suffix for cache directories to isolate them.
+        local CACHE_ID="${ID}_cache"
+        if $AS "id $CACHE_ID" >/dev/null 2>&1; then
+            echo "Applying cache group $CACHE_ID to cache directories"
+            $AS "chown -R $ID:$CACHE_ID $systemDataDir/$dataDir/cache" 2>/dev/null || :
+            $AS "chown -R $ID:$CACHE_ID $systemDataDir/$dataDir/code_cache" 2>/dev/null || :
+        fi
+
+        # Force restorecon to update SELinux labels.
+        # The -F flag is important to force-reset the context, ensuring the correct MCS
+        # categories (e.g. :c512,c768) are applied for work profile data isolation.
+        $AS "restorecon -FRv $systemDataDir/$dataDir"
+    else
+        echo "No data package found for $appPrefix"
+    fi
+    return 0
 }
 
 function pushBusybox()
@@ -305,13 +362,13 @@ function stopAllApps()
     echo "## Force-stopping all applications for all users..."
     # Get all user IDs
     local users
-    users=$($A shell pm list users | grep "UserInfo" | cut -d "{" -f2 | cut -d ":" -f1)
+    users=$($A shell pm list users | tr -d '\r' | grep "UserInfo" | cut -d "{" -f2 | cut -d ":" -f1)
 
     for uid in $users; do
         echo "   Processing User $uid..."
         # Get all packages for this user
         local pkgs
-        pkgs=$($A shell pm list packages --user "$uid" | cut -d ":" -f2)
+        pkgs=$($A shell pm list packages --user "$uid" | tr -d '\r' | cut -d ":" -f2)
         for pkg in $pkgs; do
             # We don't need to wait for each one, so we can background or just run fast
             $AS "am force-stop --user $uid $pkg"

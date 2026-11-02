@@ -103,59 +103,17 @@ do
         installer_flag="-i $installer"
     fi
 
-    # install-multiple handles one or more APKs
+	# install-multiple handles one or more APKs
 	$A install-multiple --user $USER_ID $installer_flag -r -t "${EXTRACTED_APKS[@]}"
     setInstaller "$appPrefix" "$installer"
 	rm -f "$LOCAL_TEMP"/*.apk
 
-	dataDir=$appPrefix
-	systemDataDir=$(getSystemDataDir)
-
-	echo "## Now installing app data"
-	clearAppData "$appPrefix" "$systemDataDir"
-	sleep 1
-
-	echo "Attempting to restore data for $appPrefix (User $USER_ID)"
-	# figure out current app user id
-	L=( $($AS ls -d -l "$systemDataDir/$dataDir" 2>/dev/null) ) || :
-	# drwx------ 10 u0_a240 u0_a240 4096 2017-12-10 13:45 .
-	# => return u0_a240
-	ID=${L[2]}
-
-	if [[ -z $ID ]]; then
-	    echo "Error: $appPrefix still not installed or data dir $systemDataDir/$dataDir not created"
-	    continue
-	fi
-
-	echo "APP User id is $ID"
-
 	dataPackage=$(echo "$appPackage" | sed 's/app_/data_/')
-    if [[ -f "$dataPackage" ]]; then
-        echo "Restoring data from $dataPackage"
-        cat "$dataPackage" | pv -trab | $AS "$BB tar -xzpf - -C $systemDataDir/$dataDir"
-
-        # Surgical chown: Main User/Group
-        $AS "chown -R $ID:$ID $systemDataDir/$dataDir"
-
-        # Surgical chown: Cache Group (if exists)
-        # Android uses a special _cache suffix for cache directories to isolate them.
-        CACHE_ID="${ID}_cache"
-        if $AS "id $CACHE_ID" >/dev/null 2>&1; then
-            echo "Applying cache group $CACHE_ID to cache directories"
-            $AS "chown -R $ID:$CACHE_ID $systemDataDir/$dataDir/cache" 2>/dev/null || :
-            $AS "chown -R $ID:$CACHE_ID $systemDataDir/$dataDir/code_cache" 2>/dev/null || :
-        fi
-
-    # Force restorecon to update SELinux labels.
-        # The -F flag is important to force-reset the context, ensuring the correct MCS
-        # categories (e.g. :c512,c768) are applied for work profile data isolation.
-        $AS "restorecon -FRv $systemDataDir/$dataDir"
-    else
-        echo "No data package found for $appPrefix"
-    fi
+	restorePackageData "$appPrefix" "$dataPackage" || continue
 done
 
 echo "Finalizing permissions for the entire user data root..."
+systemDataDir=$(getSystemDataDir)
 $AS "restorecon -Rv $systemDataDir"
 
 popd > /dev/null

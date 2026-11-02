@@ -89,7 +89,12 @@ fi
 
 if $data_backup; then
     echo "Creating full tar backup of /data excluding /data/media"
-    $AS "$BB tar -cz -C /data --exclude='./media' --exclude='./mediadrm' --exclude='./user/0' . 2>/dev/null" | pv -trab > data.tar.gz
+    # Avoid backing up duplicate User 0 app data while preserving the real directory
+    exclude_dup="--exclude='./user/0'"
+    if $AS "[ -L /data/data ] && [ ! -L /data/user/0 ]" 2>/dev/null; then
+        exclude_dup="--exclude='./data'"
+    fi
+    $AS "$BB tar -cz -C /data --exclude='./media' --exclude='./mediadrm' $exclude_dup . 2>/dev/null" | pv -trab > data.tar.gz
 fi
 
 if $media_backup; then
@@ -101,13 +106,13 @@ fi
 if $image_backup; then
     echo "Creating image backup..."
     #get data image location
-    PARTITION=$($AS mount | grep " /data " | cut -d ' ' -f1)
+    PARTITION=$($AS mount | tr -d '\r' | grep " /data " | cut -d ' ' -f1)
     echo "trying to get $PARTITION as data.img.gz"
     $AS "$BB dd if=$PARTITION bs=16777216 2>/dev/null | $BB gzip" | pv -trab > data.img.gz
 
     echo "Verifying image backup..."
     echo -n "  Calculate checksum on device: "
-    device_checksum="$($AS $BB sha256sum "$PARTITION" | cut -d ' ' -f1)"
+    device_checksum="$($AS $BB sha256sum "$PARTITION" | tr -d '\r' | cut -d ' ' -f1)"
     echo "$device_checksum"
     echo -n "  Calculate checksum locally: "
     local_checksum="$(gzip -d < data.img.gz | sha256sum | cut -d ' ' -f1)"

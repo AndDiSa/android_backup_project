@@ -70,20 +70,16 @@ Common values are `0` (Main User) or `Island` (if using the Island app for work 
 
 ### restore_apps.sh
 
-./restore_apps.sh [<directory_name>] [--user <ID|Name>] [apps...]
+./restore_apps.sh <directory_name> [--user <ID|Name>] [apps...]
 
 This script restores the apps and their data of a previous backup created by
-backup_apps.sh
-Either the directory is identified automatically by the device connected and the
-current date or you can pass a directory name as parameter. In that case **all**
-the apps and data found in the given directory will be restored.
+backup_apps.sh from `<directory_name>`. By default **all** the apps and data
+found in the given directory will be restored, or you can specify one or more
+`app_*.tar.gz` archives to restore selectively.
 
 The `--user` flag allows restoring into a specific user profile. If not provided,
 the script will try to use the user ID/name saved in the backup metadata,
 defaulting to User 0 if no metadata is found.
-
-If you want to restore only a part of them, please copy them into a different
-directory and give that directory as a parameter to the script.
 
 **Important**
 
@@ -98,7 +94,7 @@ data.
 
 ### restore_splitted_apps.sh
 
-./restore_splitted_apps.sh [<directory_name>] [--user <ID|Name>] [apps...]
+./restore_splitted_apps.sh <directory_name> [--user <ID|Name>] [apps...]
 
 This script works like restore_apps.sh but uses a different installation method.
 Restoring with pm install / pm install-multiple sometimes leads to a hanging
@@ -107,18 +103,10 @@ In those cases the whole restoring is blocked and you can only kill the process
 so that restoring fails.
 
 This script uses a transaction based installation method for restoring. It also
-supports the `--user` flag for Work Profile restoration.
+supports the `--user` flag for Work Profile restoration and optional `[apps...]`
+arguments to restore specific applications.
 
-
-### restore_one_splitted_app.sh
-
-./restore_one_splitted_app.sh <directory_name> [--user <ID|Name>] <app-tar-gz>
-
-This script is used to restore a single application using the transaction-based
-installation method. It is useful when you only want to restore one specific
-app from a large backup directory.
-
-Example: `./restore_one_splitted_app.sh sargo_backup --user Island app_com.example.tar.gz`
+Example (single app): `./restore_splitted_apps.sh sargo_backup --user Island app_com.example.tar.gz`
 
 
 ### full-backup.sh

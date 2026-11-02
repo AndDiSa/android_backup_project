@@ -1,5 +1,6 @@
 package de.anddisa.adb
 
+import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
 import java.text.SimpleDateFormat
 
@@ -21,6 +22,18 @@ class BackupHandler extends BackupRestoreHandler {
 		super(commander)
 	}
 
+    static String calculateSha256(File file) {
+        MessageDigest digest = MessageDigest.getInstance("SHA-256")
+        file.withInputStream { is ->
+            byte[] buffer = new byte[65536]
+            int read
+            while ((read = is.read(buffer)) != -1) {
+                digest.update(buffer, 0, read)
+            }
+        }
+        return digest.digest().encodeHex().toString()
+    }
+
 	/**
 	 * Orchestrates backing up multiple partition images.
 	 */
@@ -34,8 +47,10 @@ class BackupHandler extends BackupRestoreHandler {
 	 * Backs up a raw partition image using 'dd'.
 	 */
 	void doImageBackup(String blockDevice) {
+        new File(localBackupDirectory).mkdirs()
 		String[] parts = blockDevice.split("/")
-		FileReceiver frImg = new FileReceiver(localBackupDirectory + "${parts[parts.length - 1]}.img")
+        File localImg = new File(localBackupDirectory + "${parts[parts.length - 1]}.img")
+		FileReceiver frImg = new FileReceiver(localImg.path)
 		commander.execAsRootForResult("${ADBCommander.BB} dd if=${blockDevice} bs=4096 2>/dev/null", frImg, 15, TimeUnit.MINUTES)
 		frImg.flush()
 		if (frImg.isCancelled()) {
@@ -45,10 +60,15 @@ class BackupHandler extends BackupRestoreHandler {
             
             // Checksum verification
             println "Verifying image backup..."
-            String deviceChecksum = commander.execAsRootForResult("${ADBCommander.BB} sha256sum ${blockDevice}").split("\\s+")[0].trim()
+            String deviceChecksum = commander.execAsRootForResult("${ADBCommander.BB} sha256sum ${blockDevice}").trim().split("\\s+")[0].trim()
             println "  Device checksum: ${deviceChecksum}"
-            // We'd need a local sha256sum implementation or call system command
-            // For now, just log the device checksum.
+            String localChecksum = calculateSha256(localImg)
+            println "  Local checksum:  ${localChecksum}"
+            if (localChecksum == deviceChecksum) {
+                println "Checksums match."
+            } else {
+                println "Checksums don't match! ${localChecksum} != ${deviceChecksum}"
+            }
 		}
 	}
 
@@ -103,10 +123,12 @@ class BackupHandler extends BackupRestoreHandler {
 	 */
 	void doPackageBackup(BackupPackage p) {
         println "--- Processing: ${p.packageName} ---"
+		// 1. Gracefully terminate the app to commit databases to disk
+		commander.execAsRoot("am force-stop --user ${userId} ${p.packageName}")
+
 		// Backup APK
 		FileReceiver frApp = new FileReceiver(localBackupDirectory + "app_${p.packageName}.tar.gz")
-		commander.execAsRootForResult("${ADBCommander.BB} force-stop  ${p.packageName}", frApp, 15, TimeUnit.MINUTES)
-		commander.execAsRootForResult("${ADBCommander.BB} tar -cz -C ${p.appDirectoryOnDevice} . 2>/dev/null", frApp, 15, TimeUnit.MINUTES)
+		commander.execAsRootForResult("${ADBCommander.BB} tar -cz -C \"${p.appDirectoryOnDevice}\" . 2>/dev/null", frApp, 15, TimeUnit.MINUTES)
 		frApp.flush()
 		if (frApp.isCancelled()) {
 			p.successful &= false
@@ -117,7 +139,7 @@ class BackupHandler extends BackupRestoreHandler {
 		}
 		// Backup Data
 		FileReceiver frData = new FileReceiver(localBackupDirectory + "data_${p.packageName}.tar.gz")
-		commander.execAsRootForResult("${ADBCommander.BB} tar -cz -C ${p.dataDirectoryOnDevice} . 2>/dev/null", frData, 15, TimeUnit.MINUTES)
+		commander.execAsRootForResult("${ADBCommander.BB} tar -cz -C \"${p.dataDirectoryOnDevice}\" . 2>/dev/null", frData, 15, TimeUnit.MINUTES)
 		frData.flush()
 		if (frData.isCancelled()) {
 			p.successful &= false
@@ -143,10 +165,17 @@ class BackupHandler extends BackupRestoreHandler {
 	 * Specifically handles backing up /data (excluding media) or /data/media.
 	 */
 	void doTarBackup(String tarConfig) {
+        new File(localBackupDirectory).mkdirs()
 		FileReceiver frTar = new FileReceiver(localBackupDirectory + "${tarConfig}.tar.gz")
 		if (tarConfig.equals("data")) {
-			// Back up /data excluding media and mediadrm
-			commander.execAsRootForResult("${ADBCommander.BB} tar -cz -C /data --exclude=media --exclude=mediadrm . 2>/dev/null", frTar, 15, TimeUnit.MINUTES)
+			// Avoid backing up duplicate User 0 app data while preserving the real directory
+			String excludeDup = "--exclude='./user/0'"
+			String symlinkCheck = commander.execAsRootForResult("[ -L /data/data ] && [ ! -L /data/user/0 ] && echo symlink_data || true").trim()
+			if (symlinkCheck == "symlink_data") {
+				excludeDup = "--exclude='./data'"
+			}
+			// Back up /data excluding media, mediadrm, and duplicate User 0 dir
+			commander.execAsRootForResult("${ADBCommander.BB} tar -cz -C /data --exclude='./media' --exclude='./mediadrm' ${excludeDup} . 2>/dev/null", frTar, 15, TimeUnit.MINUTES)
 		} else if (tarConfig.equals("media")) {
 			// Back up media directories only
 			commander.execAsRootForResult("${ADBCommander.BB} tar -cz -C /data ./media ./mediadrm 2>/dev/null", frTar, 15, TimeUnit.MINUTES)
@@ -163,7 +192,11 @@ class BackupHandler extends BackupRestoreHandler {
      * Writes backup metadata to a file.
      */
     void writeBackupMetadata() {
-        File metaFile = new File(localBackupDirectory, "backup_info.txt")
+        File dir = new File(localBackupDirectory)
+        if (!dir.exists()) {
+            dir.mkdirs()
+        }
+        File metaFile = new File(dir, "backup_info.txt")
         println "Creating metadata file: ${metaFile.absolutePath}"
         
         String hw = commander.execForResult("getprop ro.hardware").trim()

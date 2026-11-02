@@ -23,7 +23,7 @@ dependencies {
     // Local Tradefed dependency (not on Maven)
     implementation files('lib/tradefed.jar')
     
-    testImplementation 'org.spockframework:spock-core:2.3-groovy-3.0'
+    testImplementation 'org.spockframework:spock-core:2.3-groovy-4.0'
 }
 
 sourceSets {

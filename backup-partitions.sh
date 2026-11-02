@@ -15,7 +15,7 @@ extra_backup=false
 graceful=false
 
 if [[ $# -gt 0 ]]; then
-    for param in $@; do
+    for param in "$@"; do
         case "$param" in
             help|-h|--help)
                 echo "Makes a full backup over ADB"
@@ -54,7 +54,7 @@ if [[ $# -gt 0 ]]; then
                 graceful=true
                 ;;
             *)
-                echo "Unknown argument $1"
+                echo "Unknown argument $param"
                 exit 1
                 ;;
         esac
@@ -74,7 +74,7 @@ pushBusybox
 mkBackupDir
 pushd "$DIR"
 
-PARTITIONS=$($A shell "ls /dev/block/by-name/")
+PARTITIONS=$($A shell "ls /dev/block/by-name/" | tr -d '\r')
 echo $PARTITIONS
 
 if $graceful; then
@@ -91,14 +91,14 @@ if $image_backup; then
     for i in $PARTITIONS; do
     	PARTITION="/dev/block/by-name/$i"
     	echo "getting $PARTITION ..."
-    	$AS "$BB dd if=$PARTITION bs=4096 2>/dev/null" > $i.img
+    	$AS "$BB dd if=$PARTITION bs=4096 2>/dev/null" > "$i.img"
 
     	echo "Verifying image backup..."
     	echo -n "  Calculate checksum on device: "
-    	device_checksum="$($AS $BB sha256sum $PARTITION | cut -d ' ' -f1)"
+    	device_checksum="$($AS $BB sha256sum "$PARTITION" | tr -d '\r' | cut -d ' ' -f1)"
     	echo "$device_checksum"
     	echo -n "  Calculate checksum locally: "
-    	local_checksum="$(sha256sum $i.img | cut -d ' ' -f1)"
+    	local_checksum="$(sha256sum "$i.img" | cut -d ' ' -f1)"
     	echo "$local_checksum"
 
     	if [ "$local_checksum" == "$device_checksum" ]; then

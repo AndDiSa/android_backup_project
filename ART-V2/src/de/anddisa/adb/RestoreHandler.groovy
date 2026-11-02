@@ -39,6 +39,39 @@ class RestoreHandler extends BackupRestoreHandler {
         }
     }
 
+    /**
+     * Reads backup_info.txt metadata from localBackupDirectory to determine target userId
+     * if --user was not explicitly specified on the command line.
+     */
+    void readBackupMetadata() {
+        File metaFile = new File(localBackupDirectory, "backup_info.txt")
+        if (metaFile.exists()) {
+            println "Reading metadata from ${metaFile.absolutePath}"
+            String savedName = null
+            String savedId = null
+            metaFile.eachLine { line ->
+                line = line.trim()
+                if (line.startsWith("USER_NAME=")) {
+                    savedName = line.substring("USER_NAME=".length()).trim()
+                } else if (line.startsWith("BACKUP_USER_ID=")) {
+                    savedId = line.substring("BACKUP_USER_ID=".length()).trim()
+                }
+            }
+            if (savedName && savedName != "Owner") {
+                println "Backup was for user name: ${savedName}"
+                int resolved = commander.resolveUserId(savedName)
+                if (resolved >= 0) {
+                    userId = resolved
+                }
+            } else if (savedId && savedId.isInteger()) {
+                println "Backup was for user ID: ${savedId}"
+                userId = savedId.toInteger()
+            }
+        } else {
+            println "No metadata file found, defaulting to User ID ${userId}"
+        }
+    }
+
 	/**
 	 * Scans the local backup directory for files matching 'app_*.tar.gz'
 	 * and populates the internal 'packages' list.
@@ -53,10 +86,11 @@ class RestoreHandler extends BackupRestoreHandler {
         File installersFile = new File(localBackupDirectory, "installers.txt")
         if (installersFile.exists()) {
             installersFile.eachLine { line ->
+                line = line.trim()
                 if (line.startsWith("package:")) {
                     def parts = line.replace("package:", "").split("\\s+installer=")
                     if (parts.length == 2) {
-                        installers[parts[0]] = parts[1]
+                        installers[parts[0].trim()] = parts[1].trim()
                     }
                 }
             }
@@ -136,8 +170,9 @@ class RestoreHandler extends BackupRestoreHandler {
 	 * This is necessary after installation as paths may change.
 	 */
 	void updatePackageWithDataFromDevice(BackupPackage bp) {
-		String[] allPackages = commander.execForResult("pm list packages --user ${userId} -f").split(System.lineSeparator())
+		String[] allPackages = commander.execForResult("pm list packages --user ${userId} -f").split("\\r?\\n")
 		for (String p : allPackages) {
+            p = p.trim()
             if (!p.startsWith("package:")) continue
 			def pathConfig = p.replace("package:", "")
 			def index = pathConfig.lastIndexOf("=")
@@ -164,7 +199,11 @@ class RestoreHandler extends BackupRestoreHandler {
 		List<String> extractedApks = decompress(p.localAppPath, tmp, ".*.apk")
 		List<File> apks = new ArrayList<File>()
 		for (String apk : extractedApks) {
-			apks.add(new File(tempDir + apk))
+			apks.add(new File(tmp, apk))
+		}
+		if (apks.isEmpty()) {
+			println "No APK found in ${p.localAppPath}"
+			return
 		}
 		// Install the extracted APKs
         List<String> installOptions = ["-t", "--user", "${userId}"]
@@ -172,50 +211,76 @@ class RestoreHandler extends BackupRestoreHandler {
             installOptions.add("-i")
             installOptions.add(p.installer)
         }
-		commander.installApks((List<File>) apks, true, installOptions)
+		commander.installApks(apks, true, installOptions)
 		// Cleanup temporary APK files
-		for (String apk : apks) {
-			File f = new File(apk)
-			f.delete()
+		for (File apk : apks) {
+			apk.delete()
 		}
 
 		updatePackageWithDataFromDevice(p)
+        if (!p.dataDirectoryOnDevice) {
+            p.dataDirectoryOnDevice = (userId == 0) ? "/data/data/${p.packageName}" : "/data/user/${userId}/${p.packageName}"
+        }
 
         // Explicitly set installer package if provided (sometimes -i flag during install is ignored)
         if (p.installer && p.installer != "null") {
             println "Setting installer attribution to ${p.installer} ..."
-            commander.execAsRoot("pm set-installer-package ${p.packageName} ${p.installer}")
+            commander.execAsRoot("pm set-installer-package ${p.packageName} ${p.installer} 2>/dev/null || true")
         }
 
-		// Clear initial data created during installation
-		commander.execAsRoot("pm clear --user ${userId} ${p.packageName}")
+		// Clear initial data created during installation (with fallback for Managed/Work Profiles)
+		String clearOut = commander.execAsRootForResult("pm clear --user ${userId} ${p.packageName}")
+        if (!clearOut || !clearOut.contains("Success")) {
+            println "WARNING: pm clear failed for ${p.packageName} (likely Profile Owner protection). Attempting manual purge..."
+            commander.execAsRoot("am force-stop --user ${userId} ${p.packageName}")
+            commander.execAsRoot("find ${p.dataDirectoryOnDevice} -mindepth 1 -maxdepth 1 -exec rm -rf {} +")
+        }
 		Thread.sleep(1000)
 		
-		// Find the numeric UID of the newly installed app
+		// Find the UID/username of the newly installed app
 		String id = null;
 		try {
-			String result = commander.execAsRootForResult("ls -d -l ${p.dataDirectoryOnDevice} 2>/dev/null")
-			id = result.split(" ")[2]
+			String result = commander.execAsRootForResult("ls -d -l ${p.dataDirectoryOnDevice} 2>/dev/null").trim()
+            if (result) {
+			    id = result.split("\\s+")[2]
+            }
 		} catch (Exception e) {
 		}
 		
-		if (id == null) {
-			println "${p.packageName} is still not installed"
+		if (!id) {
+			println "${p.packageName} is still not installed or data dir ${p.dataDirectoryOnDevice} not created"
 		} else {
-			println "restoring data to ${p.dataDirectoryOnDevice} ..."
-			File f = new File (p.localDataPath)
-			ByteArrayOutputStream baos = new ByteArrayOutputStream()
-			DeviceManager mgr =  new DeviceManager()
-			DeviceMonitorMultiplexer allocationMonitor = new DeviceMonitorMultiplexer()
-			NativeDeviceStateMonitor stateMonitor = new NativeDeviceStateMonitor(mgr, commander.device, false)
-			NativeDevice nd = new NativeDevice(commander.device, stateMonitor, allocationMonitor)
-			// Stream local data archive into 'tar' on the device
-			nd.executeShellV2Command(getRootWrappedCommand("${ADBCommander.BB} tar -xzpf - -C ${p.dataDirectoryOnDevice} . 2>/dev/null").toString(), f, baos, 5, TimeUnit.MINUTES, 1)
-			baos.flush()
-			println "... finished"
-			baos.close()
-			// Restore ownership to the app's UID
-			commander.execAsRoot("chown -R ${id}.${id} ${p.dataDirectoryOnDevice}")
+			File f = new File(p.localDataPath)
+            if (f.exists()) {
+			    println "restoring data to ${p.dataDirectoryOnDevice} (APP User id is ${id}) ..."
+			    ByteArrayOutputStream baos = new ByteArrayOutputStream()
+			    DeviceManager mgr =  new DeviceManager()
+			    DeviceMonitorMultiplexer allocationMonitor = new DeviceMonitorMultiplexer()
+			    NativeDeviceStateMonitor stateMonitor = new NativeDeviceStateMonitor(mgr, commander.device, false)
+			    NativeDevice nd = new NativeDevice(commander.device, stateMonitor, allocationMonitor)
+			    // Stream local data archive into 'tar' on the device
+			    nd.executeShellV2Command(getRootWrappedCommand("${ADBCommander.BB} tar -xzpf - -C ${p.dataDirectoryOnDevice} . 2>/dev/null").toString(), f, baos, 5, TimeUnit.MINUTES, 1)
+			    baos.flush()
+			    println "... finished"
+			    baos.close()
+
+			    // Surgical chown: Main User/Group
+			    commander.execAsRoot("chown -R ${id}:${id} ${p.dataDirectoryOnDevice}")
+
+			    // Surgical chown: Cache Group (if exists)
+			    String cacheId = "${id}_cache"
+			    String cacheIdCheck = commander.execAsRootForResult("id ${cacheId} >/dev/null 2>&1 && echo exists || true").trim()
+			    if (cacheIdCheck == "exists") {
+			        println "Applying cache group ${cacheId} to cache directories"
+			        commander.execAsRoot("chown -R ${id}:${cacheId} ${p.dataDirectoryOnDevice}/cache 2>/dev/null || true")
+			        commander.execAsRoot("chown -R ${id}:${cacheId} ${p.dataDirectoryOnDevice}/code_cache 2>/dev/null || true")
+			    }
+
+			    // Force restorecon to update SELinux labels (including MCS categories for Work Profiles)
+			    commander.execAsRoot("restorecon -FRv ${p.dataDirectoryOnDevice}")
+            } else {
+                println "No data package found for ${p.packageName}"
+            }
 		}
 	}
 

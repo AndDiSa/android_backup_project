@@ -30,8 +30,9 @@ class DeviceInfoHandler {
         String pmFlags = "-f"
         if (!includeSystem) pmFlags += " -3"
 
-		String[] allPackages = commander.execForResult("pm list packages --user ${userId} ${pmFlags}").split(System.lineSeparator())
+		String[] allPackages = commander.execForResult("pm list packages --user ${userId} ${pmFlags}").split("\\r?\\n")
 		for (String p : allPackages) {
+            p = p.trim()
             if (!p.startsWith("package:")) continue
 			def pathConfig = p.replace("package:", "")
 			def index = pathConfig.lastIndexOf("=")

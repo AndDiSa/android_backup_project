@@ -72,6 +72,14 @@ class ABP {
             System.exit(0)
         }
 
+        // Target a specific device by its serial number before checking root or pushing busybox
+		if (line.hasOption("serial")) {
+			String selectedDevice = line.getOptionValue("serial")
+            adbc.device = null
+        	List<IDevice> devices = adbc.getBridge().getDevices();
+			devices.each { it -> if (it.serialNumber == selectedDevice) { adbc.setDevice(it) } }
+        }
+
         if (adbc.device == null) {
             println "Error: No device connected. Please connect a device or specify serial with -s."
             System.exit(1)
@@ -98,22 +106,13 @@ class ABP {
                 System.exit(1)
             }
         }
-		
-        // Target a specific device by its serial number
-		if (line.hasOption("serial")) {
-			String selectedDevice = line.getOptionValue("serial")
-        	List<IDevice> devices = adbc.getBridge().getDevices();
-			devices.each { it -> if (it.serialNumber == selectedDevice) { adbc.setDevice(it) } }
-        }
-
-        if (adbc.device == null) {
-            println "Error: No device connected. Please connect a device or specify serial with -s."
-            System.exit(1)
-        }
 
         int userId = 0
         if (line.hasOption("user")) {
             userId = adbc.resolveUserId(line.getOptionValue("user"))
+            if (userId < 0) {
+                System.exit(1)
+            }
         }
 		
 		// Configuration for base directory where backups are stored
@@ -178,9 +177,13 @@ class ABP {
         } else if (line.hasOption("restore")) {
 			String appPackageFilter = null
 			RestoreHandler rh = new RestoreHandler(adbc)
-            rh.userId = userId
 			rh.localBackupDirectory = baseDir
 			rh.tempDir = tmpDir
+            if (line.hasOption("user")) {
+                rh.userId = userId
+            } else {
+                rh.readBackupMetadata()
+            }
 			
 			if (line.hasOption("apks")) {
 				// Restore APKs and data from local storage to device

@@ -78,15 +78,14 @@ do
     echo "--- Restoring: $appPackage ---"
 
     # Create a sub-temp directory for this specific app
-    temp_dir="${LOCAL_TEMP}/apkinstaller-$(date +%s)"
-    mkdir -p "$temp_dir"
+    temp_dir=$(mktemp -d -p "$LOCAL_TEMP" apkinstaller-XXXXXX)
 
     # Extract the tar file of the app into the temporary directory
     tar xvfz "$appPackage" -C "$temp_dir" --wildcards "*.apk" > /dev/null
 
     # Initialize total size of APKs
     total_size=$(find "$temp_dir" -type f -name "*.apk" -printf '%s+')
-    total_size=$(echo "${total_size}0" | bc)
+    total_size=$(( ${total_size}0 ))
 
     if [ "$total_size" -eq 0 ]; then
         echo "No APKs found in $appPackage"
@@ -107,7 +106,7 @@ do
     # Create a new installation session with the calculated total size
     create_cmd="pm install-create --user ${USER_ID} $installer_flag -r -t -d -S ${total_size}"
     echo "Executing: $create_cmd"
-    session=$($AS "$create_cmd")
+    session=$($AS "$create_cmd" | tr -d '\r')
     session_id=$(echo "$session" | grep -o '[0-9]\+')
 
     if [ -z "$session_id" ]; then
@@ -158,47 +157,15 @@ do
     # Clean up the temporary directory
     rm -rf "$temp_dir"
 
-    appPrefix=$(echo "$appPackage" | sed 's/app_//' | sed 's/\.tar\.gz//')
-    dataDir=$appPrefix
-    systemDataDir=$(getSystemDataDir)
-
-    echo "## Now installing app data"
-    clearAppData "$appPrefix" "$systemDataDir"
-    sleep 1
-
-    # figure out current app user id
-    L=( $($AS ls -d -l "$systemDataDir/$dataDir" 2>/dev/null) ) || :
-    ID=${L[2]}
-
-    if [[ -z "$ID" ]]; then
-        echo "Error: $appPrefix still not installed or data dir $systemDataDir/$dataDir not created"
+    dataPackage=$(echo "$appPackage" | sed 's/app_/data_/')
+    if ! restorePackageData "$appPrefix" "$dataPackage"; then
         overall_error=1
         continue
-    fi
-
-    echo "APP User id is $ID"
-
-    dataPackage=$(echo "$appPackage" | sed 's/app_/data_/')
-    if [[ -f "$dataPackage" ]]; then
-        cat "$dataPackage" | pv -trab | $AS "$BB tar -xzpf - -C $systemDataDir/$dataDir"
-
-        # Surgical chown: Main User/Group
-        $AS "chown -R $ID:$ID $systemDataDir/$dataDir"
-
-        # Surgical chown: Cache Group (if exists)
-        CACHE_ID="${ID}_cache"
-        if $AS "id $CACHE_ID" >/dev/null 2>&1; then
-            echo "Applying cache group $CACHE_ID to cache directories"
-            $AS "chown -R $ID:$CACHE_ID $systemDataDir/$dataDir/cache" 2>/dev/null || :
-            $AS "chown -R $ID:$CACHE_ID $systemDataDir/$dataDir/code_cache" 2>/dev/null || :
-        fi
-
-        # Force restorecon to update SELinux MCS categories for Work Profiles
-        $AS "restorecon -FRv $systemDataDir/$dataDir"
     fi
 done
 
 echo "Finalizing permissions..."
+systemDataDir=$(getSystemDataDir)
 $AS "restorecon -Rv $systemDataDir"
 
 popd > /dev/null

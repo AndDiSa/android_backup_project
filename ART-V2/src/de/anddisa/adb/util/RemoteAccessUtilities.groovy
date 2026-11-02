@@ -16,20 +16,20 @@ class RemoteAccessUtilities {
 	}
 
 	def String cleanup() {
-		commander.exec("rm ${ADBCommander.BB}")
+		commander.execAsRoot("rm ${ADBCommander.BB}")
 	}
 
 	def boolean checkForCleanData() {
-		String result = commander.execForResult("ls /data/ | wc -l")
+		String result = commander.execAsRootForResult("ls /data/ | wc -l").trim()
 		if (Integer.parseInt(result) <= 1) {
-			commander.exec("mount /data")
-			result = commander.execForResult("ls /data/ | wc -l")
+			commander.execAsRoot("mount /data")
+			result = commander.execAsRootForResult("ls /data/ | wc -l").trim()
 		}
 
 		if (Integer.parseInt(result) <= 4) {
 			println "It seems like /data is not in a sane state!"
-			println commander.execForResult("ls /data")
-			println commander.execForResult("stat /data")
+			println commander.execAsRootForResult("ls /data")
+			println commander.execAsRootForResult("stat /data")
 			return false
 		}
 
@@ -51,8 +51,9 @@ class RemoteAccessUtilities {
 				println "   Processing User $uid..."
 				String pkgs = commander.execForResult("pm list packages --user $uid")
 				pkgs.eachLine { pkgLine ->
+					pkgLine = pkgLine.trim()
 					if (pkgLine.startsWith("package:")) {
-						def pkg = pkgLine.substring(8)
+						def pkg = pkgLine.substring(8).trim()
 						commander.execAsRoot("am force-stop --user $uid $pkg")
 					}
 				}
