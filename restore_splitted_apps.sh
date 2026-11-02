@@ -21,9 +21,9 @@ sleep 5
 DIR="$1"
 
 if [[ ! -d "$DIR" ]]; then
-	echo "Usage: $0 <data-dir> [--user <ID|Name>] [apps...]"
-	echo "Must be created with ./backup_apps.sh"
-	exit 2
+    echo "Usage: $0 <data-dir> [--user <ID|Name>] [apps...]"
+    echo "Must be created with ./backup_apps.sh"
+    exit 2
 fi
 shift
 
@@ -64,11 +64,11 @@ trap cleanup_local EXIT
 pushd "$DIR" > /dev/null
 
 if [ $# -gt 0 ]; then
-	APPS="$*"
-	echo "## Push apps: $APPS"
+    APPS="$*"
+    echo "## Push apps: $APPS"
 else
-	APPS=$(echo app_*)
-	echo "## Push all apps in $DIR: $APPS"
+    APPS=$(echo app_*)
+    echo "## Push all apps in $DIR: $APPS"
 fi
 
 overall_error=0

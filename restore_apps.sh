@@ -22,9 +22,9 @@ sleep 5
 DIR="$1"
 
 if [[ ! -d "$DIR" ]]; then
-	echo "Usage: $0 <data-dir> [--user <ID|Name>] [apps...]"
-	echo "Must be created with ./backup_apps.sh"
-	exit 2
+    echo "Usage: $0 <data-dir> [--user <ID|Name>] [apps...]"
+    echo "Must be created with ./backup_apps.sh"
+    exit 2
 fi
 shift
 
@@ -65,11 +65,11 @@ trap cleanup_local EXIT
 pushd "$DIR" > /dev/null
 
 if [ $# -gt 0 ]; then
-	APPS="$*"
-	echo "## Push apps: $APPS"
+    APPS="$*"
+    echo "## Push apps: $APPS"
 else
-	APPS=$(echo app_*)
-	echo "## Push all apps in $DIR: $APPS"
+    APPS=$(echo app_*)
+    echo "## Push all apps in $DIR: $APPS"
 fi
 
 echo "## Installing apps"
@@ -90,10 +90,10 @@ do
         continue
     fi
 
-	appPrefix=$(echo "$appPackage" | sed 's/app_//' | sed 's/\.tar\.gz//')
-	echo "Package Name: $appPrefix"
+    appPrefix=$(echo "$appPackage" | sed 's/app_//' | sed 's/\.tar\.gz//')
+    echo "Package Name: $appPrefix"
 
-	echo "Installing ${EXTRACTED_APKS[*]}"
+    echo "Installing ${EXTRACTED_APKS[*]}"
 
     # Identify original installer to maintain attribution
     installer=$(getInstaller "$appPrefix")
@@ -103,13 +103,13 @@ do
         installer_flag="-i $installer"
     fi
 
-	# install-multiple handles one or more APKs
-	$A install-multiple --user $USER_ID $installer_flag -r -t "${EXTRACTED_APKS[@]}"
+    # install-multiple handles one or more APKs
+    $A install-multiple --user $USER_ID $installer_flag -r -t "${EXTRACTED_APKS[@]}"
     setInstaller "$appPrefix" "$installer"
-	rm -f "$LOCAL_TEMP"/*.apk
+    rm -f "$LOCAL_TEMP"/*.apk
 
-	dataPackage=$(echo "$appPackage" | sed 's/app_/data_/')
-	restorePackageData "$appPrefix" "$dataPackage" || continue
+    dataPackage=$(echo "$appPackage" | sed 's/app_/data_/')
+    restorePackageData "$appPrefix" "$dataPackage" || continue
 done
 
 echo "Finalizing permissions for the entire user data root..."

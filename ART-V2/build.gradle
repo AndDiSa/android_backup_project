@@ -48,10 +48,10 @@ application {
 }
 
 shadowJar {
-   archiveFileName = 'ART-V2.jar'
-   manifest {
-       attributes 'Main-Class': 'de.anddisa.adb.ABP'
-   }
+    archiveFileName = 'ART-V2.jar'
+    manifest {
+        attributes 'Main-Class': 'de.anddisa.adb.ABP'
+    }
 }
 
 java {

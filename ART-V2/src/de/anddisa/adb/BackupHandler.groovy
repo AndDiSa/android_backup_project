@@ -18,9 +18,9 @@ import de.anddisa.adb.entities.BackupPackage
  */
 class BackupHandler extends BackupRestoreHandler {
 
-	public BackupHandler(ADBCommander commander) {
-		super(commander)
-	}
+    public BackupHandler(ADBCommander commander) {
+        super(commander)
+    }
 
     static String calculateSha256(File file) {
         MessageDigest digest = MessageDigest.getInstance("SHA-256")
@@ -34,30 +34,30 @@ class BackupHandler extends BackupRestoreHandler {
         return digest.digest().encodeHex().toString()
     }
 
-	/**
-	 * Orchestrates backing up multiple partition images.
-	 */
-	void doImageBackup(String[] blockDevices) {
-		if (blockDevices != null) {
-			blockDevices.each { doImageBackup( it ) }
-		}
-	}
+    /**
+     * Orchestrates backing up multiple partition images.
+     */
+    void doImageBackup(String[] blockDevices) {
+        if (blockDevices != null) {
+            blockDevices.each { doImageBackup( it ) }
+        }
+    }
 
-	/**
-	 * Backs up a raw partition image using 'dd'.
-	 */
-	void doImageBackup(String blockDevice) {
+    /**
+     * Backs up a raw partition image using 'dd'.
+     */
+    void doImageBackup(String blockDevice) {
         new File(localBackupDirectory).mkdirs()
-		String[] parts = blockDevice.split("/")
+        String[] parts = blockDevice.split("/")
         File localImg = new File(localBackupDirectory + "${parts[parts.length - 1]}.img")
-		FileReceiver frImg = new FileReceiver(localImg.path)
-		commander.execAsRootForResult("${ADBCommander.BB} dd if=${blockDevice} bs=4096 2>/dev/null", frImg, 15, TimeUnit.MINUTES)
-		frImg.flush()
-		if (frImg.isCancelled()) {
-			println "error while transferring file ..."
-		} else {
-			println "image transfer successful"
-            
+        FileReceiver frImg = new FileReceiver(localImg.path)
+        commander.execAsRootForResult("${ADBCommander.BB} dd if=${blockDevice} bs=4096 2>/dev/null", frImg, 15, TimeUnit.MINUTES)
+        frImg.flush()
+        if (frImg.isCancelled()) {
+            println "error while transferring file ..."
+        } else {
+            println "image transfer successful"
+
             // Checksum verification
             println "Verifying image backup..."
             String deviceChecksum = commander.execAsRootForResult("${ADBCommander.BB} sha256sum ${blockDevice}").trim().split("\\s+")[0].trim()
@@ -69,8 +69,8 @@ class BackupHandler extends BackupRestoreHandler {
             } else {
                 println "Checksums don't match! ${localChecksum} != ${deviceChecksum}"
             }
-		}
-	}
+        }
+    }
 
     /**
      * Backs up all named partitions found in /dev/block/by-name/
@@ -80,7 +80,7 @@ class BackupHandler extends BackupRestoreHandler {
         String result = commander.execAsRootForResult("ls /dev/block/by-name/")
         String[] partitions = result.split("\\s+")
         println "Found ${partitions.length} partitions."
-        
+
         stopRuntime()
         for (String p : partitions) {
             if (p.trim()) {
@@ -91,102 +91,102 @@ class BackupHandler extends BackupRestoreHandler {
         startRuntime()
     }
 
-	/**
-	 * Backs up selected application packages (APK and data).
-	 * Does NOT stop the runtime, only force-stops individual apps during their backup.
-	 */
-	void doPackageBackup() {
-		File f = new File(localBackupDirectory)
-		if (!f.exists()) {
-			f.mkdirs()
-		} else {
-			if (f.isDirectory()) {
-				if (f.list().length != 0) {
-					println "$localBackupDirectory is not empty exiting files may be overwritten"
-				}
-			} else {
-				println "$localBackupDirectory exists but is no directory ... bailing out"
-				System.exit(-1)
-			}
-		}
-		println "starting backup ..."
-		for (BackupPackage p : packages) {
-			 if (p.selected) {
-				 doPackageBackup(p)
-			 }
-	    }
-		println "... backup finished"
-	}
+    /**
+     * Backs up selected application packages (APK and data).
+     * Does NOT stop the runtime, only force-stops individual apps during their backup.
+     */
+    void doPackageBackup() {
+        File f = new File(localBackupDirectory)
+        if (!f.exists()) {
+            f.mkdirs()
+        } else {
+            if (f.isDirectory()) {
+                if (f.list().length != 0) {
+                    println "$localBackupDirectory is not empty exiting files may be overwritten"
+                }
+            } else {
+                println "$localBackupDirectory exists but is no directory ... bailing out"
+                System.exit(-1)
+            }
+        }
+        println "starting backup ..."
+        for (BackupPackage p : packages) {
+            if (p.selected) {
+                doPackageBackup(p)
+            }
+        }
+        println "... backup finished"
+    }
 
-	/**
-	 * Backs up a single package by creating tar archives of its APK and data directories.
-	 */
-	void doPackageBackup(BackupPackage p) {
+    /**
+     * Backs up a single package by creating tar archives of its APK and data directories.
+     */
+    void doPackageBackup(BackupPackage p) {
         println "--- Processing: ${p.packageName} ---"
-		// 1. Gracefully terminate the app to commit databases to disk
-		commander.execAsRoot("am force-stop --user ${userId} ${p.packageName}")
+        // 1. Gracefully terminate the app to commit databases to disk
+        commander.execAsRoot("am force-stop --user ${userId} ${p.packageName}")
 
-		// Backup APK
-		FileReceiver frApp = new FileReceiver(localBackupDirectory + "app_${p.packageName}.tar.gz")
-		commander.execAsRootForResult("${ADBCommander.BB} tar -cz -C \"${p.appDirectoryOnDevice}\" . 2>/dev/null", frApp, 15, TimeUnit.MINUTES)
-		frApp.flush()
-		if (frApp.isCancelled()) {
-			p.successful &= false
-			println "error while transferring file"
-		} else {
-			p.successful &= true
-			println "app package transfer successful"
-		}
-		// Backup Data
-		FileReceiver frData = new FileReceiver(localBackupDirectory + "data_${p.packageName}.tar.gz")
-		commander.execAsRootForResult("${ADBCommander.BB} tar -cz -C \"${p.dataDirectoryOnDevice}\" . 2>/dev/null", frData, 15, TimeUnit.MINUTES)
-		frData.flush()
-		if (frData.isCancelled()) {
-			p.successful &= false
-			println "error while transferring file"
-		} else {
-			p.successful &= true
-			println "data package transfer successful"
-		}
-	}
-	
-	/**
-	 * Backs up partitions or directories as tar archives.
-	 */
-	void doTarBackup(String[] tarConfigs) {
-		println "starting backup ..."
-		if (tarConfigs != null) {
-			tarConfigs.each { doTarBackup( it ) }
-		}
-		println "... backup finished"
-	}
+        // Backup APK
+        FileReceiver frApp = new FileReceiver(localBackupDirectory + "app_${p.packageName}.tar.gz")
+        commander.execAsRootForResult("${ADBCommander.BB} tar -cz -C \"${p.appDirectoryOnDevice}\" . 2>/dev/null", frApp, 15, TimeUnit.MINUTES)
+        frApp.flush()
+        if (frApp.isCancelled()) {
+            p.successful &= false
+            println "error while transferring file"
+        } else {
+            p.successful &= true
+            println "app package transfer successful"
+        }
+        // Backup Data
+        FileReceiver frData = new FileReceiver(localBackupDirectory + "data_${p.packageName}.tar.gz")
+        commander.execAsRootForResult("${ADBCommander.BB} tar -cz -C \"${p.dataDirectoryOnDevice}\" . 2>/dev/null", frData, 15, TimeUnit.MINUTES)
+        frData.flush()
+        if (frData.isCancelled()) {
+            p.successful &= false
+            println "error while transferring file"
+        } else {
+            p.successful &= true
+            println "data package transfer successful"
+        }
+    }
 
-	/**
-	 * Specifically handles backing up /data (excluding media) or /data/media.
-	 */
-	void doTarBackup(String tarConfig) {
+    /**
+     * Backs up partitions or directories as tar archives.
+     */
+    void doTarBackup(String[] tarConfigs) {
+        println "starting backup ..."
+        if (tarConfigs != null) {
+            tarConfigs.each { doTarBackup( it ) }
+        }
+        println "... backup finished"
+    }
+
+    /**
+     * Specifically handles backing up /data (excluding media) or /data/media.
+     */
+    void doTarBackup(String tarConfig) {
         new File(localBackupDirectory).mkdirs()
-		FileReceiver frTar = new FileReceiver(localBackupDirectory + "${tarConfig}.tar.gz")
-		if (tarConfig.equals("data")) {
-			// Avoid backing up duplicate User 0 app data while preserving the real directory
-			String excludeDup = "--exclude='./user/0'"
-			String symlinkCheck = commander.execAsRootForResult("[ -L /data/data ] && [ ! -L /data/user/0 ] && echo symlink_data || true").trim()
-			if (symlinkCheck == "symlink_data") {
-				excludeDup = "--exclude='./data'"
-			}
-			// Back up /data excluding media, mediadrm, and duplicate User 0 dir
-			commander.execAsRootForResult("${ADBCommander.BB} tar -cz -C /data --exclude='./media' --exclude='./mediadrm' ${excludeDup} . 2>/dev/null", frTar, 15, TimeUnit.MINUTES)
-		} else if (tarConfig.equals("media")) {
-			// Back up media directories only
-			commander.execAsRootForResult("${ADBCommander.BB} tar -cz -C /data ./media ./mediadrm 2>/dev/null", frTar, 15, TimeUnit.MINUTES)
-	    }
-		frTar.flush()
-		if (frTar.isCancelled()) {
-			println "error while transferring file ..."
-		} else {
-			println "transfer successful"
-		}
-	}
+        FileReceiver frTar = new FileReceiver(localBackupDirectory + "${tarConfig}.tar.gz")
+        if (tarConfig.equals("data")) {
+            // Avoid backing up duplicate User 0 app data while preserving the real directory
+            String excludeDup = "--exclude='./user/0'"
+            String symlinkCheck = commander.execAsRootForResult("[ -L /data/data ] && [ ! -L /data/user/0 ] && echo symlink_data || true").trim()
+            if (symlinkCheck == "symlink_data") {
+                excludeDup = "--exclude='./data'"
+            }
+            // Back up /data excluding media, mediadrm, and duplicate User 0 dir
+            commander.execAsRootForResult("${ADBCommander.BB} tar -cz -C /data --exclude='./media' --exclude='./mediadrm' ${excludeDup} . 2>/dev/null", frTar, 15, TimeUnit.MINUTES)
+        } else if (tarConfig.equals("media")) {
+            // Back up media directories only
+            commander.execAsRootForResult("${ADBCommander.BB} tar -cz -C /data ./media ./mediadrm 2>/dev/null", frTar, 15, TimeUnit.MINUTES)
+        }
+        frTar.flush()
+        if (frTar.isCancelled()) {
+            println "error while transferring file ..."
+        } else {
+            println "transfer successful"
+        }
+    }
 
     /**
      * Writes backup metadata to a file.

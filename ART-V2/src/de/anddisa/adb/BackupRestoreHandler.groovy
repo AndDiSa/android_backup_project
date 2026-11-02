@@ -15,35 +15,34 @@ import de.anddisa.adb.entities.BackupPackage
 import de.anddisa.adb.util.RemoteAccessUtilities
 
 class BackupRestoreHandler {
-	ADBCommander commander
-	RemoteAccessUtilities remoteUtils
-	String localBackupDirectory = "/tmp/1/"
-	List<BackupPackage> packages = []
+    ADBCommander commander
+    RemoteAccessUtilities remoteUtils
+    String localBackupDirectory = "/tmp/1/"
+    List<BackupPackage> packages = []
     int userId = 0
 
-	static Options createCommandLineOptions() {
-		
-		final Options options = new Options()
-		options.addOption(Option.builder("s")
-			.longOpt("serial")
-			.desc("connect to device with serial number")
-			.required(false)
-			.hasArg()
-			.build())
+    static Options createCommandLineOptions() {
+        final Options options = new Options()
+        options.addOption(Option.builder("s")
+                .longOpt("serial")
+                .desc("connect to device with serial number")
+                .required(false)
+                .hasArg()
+                .build())
 
-		options.addOption(Option.builder("alf")
-				.longOpt("appLocationFilter")
-				.desc("filter apks to backup (regex, e.g. '/data/app.*|/data/priv-app.*') (default: all apks and data on the device)")
-				.required(false)
-				.hasArg()
-				.build())
-	
-		options.addOption(Option.builder("apf")
-				.longOpt("appPackageFilter")
-				.desc("filter apks to restore (regex, e.g. '.*google.*') (default: all packages found the the selected directory)")
-				.required(false)
-				.hasArg()
-				.build())
+        options.addOption(Option.builder("alf")
+                .longOpt("appLocationFilter")
+                .desc("filter apks to backup (regex, e.g. '/data/app.*|/data/priv-app.*') (default: all apks and data on the device)")
+                .required(false)
+                .hasArg()
+                .build())
+
+        options.addOption(Option.builder("apf")
+                .longOpt("appPackageFilter")
+                .desc("filter apks to restore (regex, e.g. '.*google.*') (default: all packages found the the selected directory)")
+                .required(false)
+                .hasArg()
+                .build())
 
         options.addOption(Option.builder("u")
                 .longOpt("user")
@@ -58,127 +57,128 @@ class BackupRestoreHandler {
                 .required(false)
                 .build())
 
-		options.addOption(Option.builder("bd")
-				.longOpt("baseDir")
-				.desc("base directory to backup to / restore from (default: current directory)")
-				.hasArg()
-				.build())
-		options.addOption(Option.builder("cs")
-				.longOpt("createSubfolder")
-				.desc("create subfolder 'yyyy-MM-dd' in <baseDir> for storing the backup data")
-				.build())
-		options.addOption(Option.builder("td")
-				.longOpt("tmpDir")
-				.desc("directory for temporary files (default: current directory)")
-				.hasArg()
-				.build())
+        options.addOption(Option.builder("bd")
+                .longOpt("baseDir")
+                .desc("base directory to backup to / restore from (default: current directory)")
+                .hasArg()
+                .build())
+        options.addOption(Option.builder("cs")
+                .longOpt("createSubfolder")
+                .desc("create subfolder 'yyyy-MM-dd' in <baseDir> for storing the backup data")
+                .build())
+        options.addOption(Option.builder("td")
+                .longOpt("tmpDir")
+                .desc("directory for temporary files (default: current directory)")
+                .hasArg()
+                .build())
 
-		OptionGroup commands = new OptionGroup()
-		commands.addOption(Option.builder("b")
-				.longOpt("backup")
-				.desc("create a backup")
-				.build())
-		commands.addOption(Option.builder("r")
-				.longOpt("restore")
-				.desc("restore a backup")
-				.build())
-		commands.addOption(Option.builder("d")
-				.longOpt("devices")
-				.desc("list available devices through adb")
-				.build())
-		commands.addOption(Option.builder("in")
-				.longOpt("info")
-				.desc("dump device info of selected device")
-				.build())
-		commands.addOption(Option.builder("h")
-				.longOpt("help")
-				.desc("print help")
-				.build())
-		commands.setRequired(true)
+        OptionGroup commands = new OptionGroup()
+        commands.addOption(Option.builder("b")
+                .longOpt("backup")
+                .desc("create a backup")
+                .build())
+        commands.addOption(Option.builder("r")
+                .longOpt("restore")
+                .desc("restore a backup")
+                .build())
+        commands.addOption(Option.builder("d")
+                .longOpt("devices")
+                .desc("list available devices through adb")
+                .build())
+        commands.addOption(Option.builder("in")
+                .longOpt("info")
+                .desc("dump device info of selected device")
+                .build())
+        commands.addOption(Option.builder("h")
+                .longOpt("help")
+                .desc("print help")
+                .build())
+        commands.setRequired(true)
 
-		options.addOptionGroup(commands)
+        options.addOptionGroup(commands)
 
-		OptionGroup mode = new OptionGroup()
-		mode.addOption(Option.builder("a")
-				.longOpt("apks")
-				.desc("backup / restore apks (and data)")
-				.build())
-		mode.addOption(Option.builder("i")
-				.longOpt("image")
-				.desc("backup / restore partition images (optional: list specific partitions)")
-				.hasArgs()
-				.optionalArg(true)
-				.build())
-		mode.addOption(Option.builder("t")
-				.longOpt("tar")
-				.desc("backup / restore tar files")
-				.hasArgs()
-				.build())
-		options.addOptionGroup(mode)
+        OptionGroup mode = new OptionGroup()
+        mode.addOption(Option.builder("a")
+                .longOpt("apks")
+                .desc("backup / restore apks (and data)")
+                .build())
+        mode.addOption(Option.builder("i")
+                .longOpt("image")
+                .desc("backup / restore partition images (optional: list specific partitions)")
+                .hasArgs()
+                .optionalArg(true)
+                .build())
+        mode.addOption(Option.builder("t")
+                .longOpt("tar")
+                .desc("backup / restore tar files")
+                .hasArgs()
+                .build())
+        options.addOptionGroup(mode)
 
-		return options
-	}
+        return options
+    }
 
-	public static void outputCommandLineHelp(final Options options) {
-		final HelpFormatter formater = new HelpFormatter();
-		formater.printHelp("abp [OPTIONS] ... (-backup | -devices | -restore | -info)", options)
-	}
+    public static void outputCommandLineHelp(final Options options) {
+        final HelpFormatter formater = new HelpFormatter()
+        formater.printHelp("abp [OPTIONS] ... (-backup | -devices | -restore | -info)", options)
+    }
 
-	public BackupRestoreHandler(ADBCommander commander) {
-		this.commander = commander
-		this.remoteUtils = new RemoteAccessUtilities(commander)
-	}
-	
-	void stopRuntime() {
-		remoteUtils.stopAllApps()
-		remoteUtils.stopRuntime()
-		Thread.sleep(10000)
-	}
+    public BackupRestoreHandler(ADBCommander commander) {
+        this.commander = commander
+        this.remoteUtils = new RemoteAccessUtilities(commander)
+    }
 
-	void startRuntime() {
-		remoteUtils.startRuntime()
-	}
+    void stopRuntime() {
+        remoteUtils.stopAllApps()
+        remoteUtils.stopRuntime()
+        Thread.sleep(10000)
+    }
 
-	List<String> decompress(String tarFileName, File out, String filter) throws IOException {
-		List<String> extractedFiles = []
-		TarArchiveInputStream fin
-		try {
-			fin = new TarArchiveInputStream(new GzipCompressorInputStream(new FileInputStream(tarFileName)))
-			TarArchiveEntry entry;
-			while ((entry = fin.getNextTarEntry()) != null) {
-				if (entry.isDirectory()) {
-					continue;
-				}
-				if (entry.getName().matches(filter)) {
-					File curfile = new File(out, entry.getName());
-					File parent = curfile.getParentFile();
-					if (!parent.exists()) {
-						parent.mkdirs();
-					}
-					IOUtils.copy(fin, new FileOutputStream(curfile));
-					extractedFiles.add(entry.getName())
-				}
-			}
-		} catch (Exception e) {
-			
-		} finally {
-			if (fin != null)
-				try {
-					fin.close()
-				} catch (Exception e) {
-				}
-		}
-		return extractedFiles
-	}
+    void startRuntime() {
+        remoteUtils.startRuntime()
+    }
 
-	void getInstalledPackagesFromDevice(boolean includeSystem = false) {
-		packages = []
+    List<String> decompress(String tarFileName, File out, String filter) throws IOException {
+        List<String> extractedFiles = []
+        TarArchiveInputStream fin
+        try {
+            fin = new TarArchiveInputStream(new GzipCompressorInputStream(new FileInputStream(tarFileName)))
+            TarArchiveEntry entry
+            while ((entry = fin.getNextTarEntry()) != null) {
+                if (entry.isDirectory()) {
+                    continue
+                }
+                if (entry.getName().matches(filter)) {
+                    File curfile = new File(out, entry.getName())
+                    File parent = curfile.getParentFile()
+                    if (!parent.exists()) {
+                        parent.mkdirs()
+                    }
+                    IOUtils.copy(fin, new FileOutputStream(curfile))
+                    extractedFiles.add(entry.getName())
+                }
+            }
+        } catch (Exception e) {
+
+        } finally {
+            if (fin != null) {
+                try {
+                    fin.close()
+                } catch (Exception e) {
+                }
+            }
+        }
+        return extractedFiles
+    }
+
+    void getInstalledPackagesFromDevice(boolean includeSystem = false) {
+        packages = []
         String pmFlags = "-f"
         if (!includeSystem) {
             pmFlags += " -3"
         }
-		String[] allPackages = commander.execForResult("pm list packages --user ${userId} ${pmFlags}").split("\\r?\\n")
-        
+        String[] allPackages = commander.execForResult("pm list packages --user ${userId} ${pmFlags}").split("\\r?\\n")
+
         // Fetch installer info: pm list packages -i
         Map<String, String> installers = [:]
         String installerOutput = commander.execForResult("pm list packages --user ${userId} -i ${pmFlags.replace('-f', '')}")
@@ -195,68 +195,68 @@ class BackupRestoreHandler {
             }
         }
 
-		for (String p : allPackages) {
+        for (String p : allPackages) {
             p = p.trim()
             if (!p.startsWith("package:")) continue
-			def pathConfig = p.replace("package:", "")
-			def index = pathConfig.lastIndexOf("=")
-			def appPath = pathConfig.substring(0, index)
-			BackupPackage bp = new BackupPackage()
-			bp.packageName = pathConfig.substring(index + 1)
-			bp.appDirectoryOnDevice = appPath.substring(0, appPath.lastIndexOf("/"))
+            def pathConfig = p.replace("package:", "")
+            def index = pathConfig.lastIndexOf("=")
+            def appPath = pathConfig.substring(0, index)
+            BackupPackage bp = new BackupPackage()
+            bp.packageName = pathConfig.substring(index + 1)
+            bp.appDirectoryOnDevice = appPath.substring(0, appPath.lastIndexOf("/"))
             if (userId == 0) {
-    			bp.dataDirectoryOnDevice = "/data/data/" + bp.packageName
+                bp.dataDirectoryOnDevice = "/data/data/" + bp.packageName
             } else {
                 bp.dataDirectoryOnDevice = "/data/user/${userId}/" + bp.packageName
             }
-			bp.selected = true // Default to true if they came back from pm list packages
-			bp.successful = false
+            bp.selected = true // Default to true if they came back from pm list packages
+            bp.successful = false
             bp.installer = installers[bp.packageName]
-			packages.add(bp)
-		}
-	}
+            packages.add(bp)
+        }
+    }
 
-	void listSelectedPackages() {
-		for (BackupPackage p : packages) {
-			if (p.selected) {
-				println p.packageName + " : " + p.appDirectoryOnDevice + " : " + p.dataDirectoryOnDevice + " : " + p.localAppPath + " : " + p.localDataPath
-			}
-		}
-	}
+    void listSelectedPackages() {
+        for (BackupPackage p : packages) {
+            if (p.selected) {
+                println p.packageName + " : " + p.appDirectoryOnDevice + " : " + p.dataDirectoryOnDevice + " : " + p.localAppPath + " : " + p.localDataPath
+            }
+        }
+    }
 
-	void filterByPackageName(String filter) {
-		for (BackupPackage p : packages) {
-			p.selected = (filter == null || filter.trim().isEmpty() || p.packageName.matches(filter)) ? true : false
-		}
-	}
+    void filterByPackageName(String filter) {
+        for (BackupPackage p : packages) {
+            p.selected = (filter == null || filter.trim().isEmpty() || p.packageName.matches(filter)) ? true : false
+        }
+    }
 
-	void filterByInstallLocation(String filter) {
-		for (BackupPackage p : packages) {
-			p.selected = (filter == null || filter.trim().isEmpty() || p.appDirectoryOnDevice.matches(filter)) ? true : false
-		}
-	}
+    void filterByInstallLocation(String filter) {
+        for (BackupPackage p : packages) {
+            p.selected = (filter == null || filter.trim().isEmpty() || p.appDirectoryOnDevice.matches(filter)) ? true : false
+        }
+    }
 
-	void selectUserPackages() {
-		for (BackupPackage p : packages) {
-			p.selected = p.appDirectoryOnDevice.startsWith("/data/app") ? true : p.selected
-		}
-	}
+    void selectUserPackages() {
+        for (BackupPackage p : packages) {
+            p.selected = p.appDirectoryOnDevice.startsWith("/data/app") ? true : p.selected
+        }
+    }
 
-	void selectSystemPackages() {
-		for (BackupPackage p : packages) {
-			p.selected = p.appDirectoryOnDevice.startsWith("/system/") ? true : p.selected
-		}
-	}
+    void selectSystemPackages() {
+        for (BackupPackage p : packages) {
+            p.selected = p.appDirectoryOnDevice.startsWith("/system/") ? true : p.selected
+        }
+    }
 
-	void selectProductPackages() {
-		for (BackupPackage p : packages) {
-			p.selected = p.appDirectoryOnDevice.startsWith("/product/") ? true : p.selected
-		}
-	}
+    void selectProductPackages() {
+        for (BackupPackage p : packages) {
+            p.selected = p.appDirectoryOnDevice.startsWith("/product/") ? true : p.selected
+        }
+    }
 
-	void selectAllPackages() {
-		for (BackupPackage p : packages) {
-			p.selected = true
-		}
-	}
+    void selectAllPackages() {
+        for (BackupPackage p : packages) {
+            p.selected = true
+        }
+    }
 }

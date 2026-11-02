@@ -29,15 +29,15 @@ import de.anddisa.adb.util.BusyboxManager
  */
 class ABP {
 
-	static String baseDir = "./"
-	static String tmpDir = "./"
-	static String subDir = ""
+    static String baseDir = "./"
+    static String tmpDir = "./"
+    static String subDir = ""
 
-	public static void main(String... args) {
-		// Parse command line options defined in BackupRestoreHandler
-		def CommandLineParser parser = new DefaultParser()
-		Options options = BackupRestoreHandler.createCommandLineOptions()
-		CommandLine line
+    public static void main(String... args) {
+        // Parse command line options defined in BackupRestoreHandler
+        def CommandLineParser parser = new DefaultParser()
+        Options options = BackupRestoreHandler.createCommandLineOptions()
+        CommandLine line
         try {
             line = parser.parse(options, args)
         } catch (Exception e) {
@@ -62,29 +62,29 @@ class ABP {
             System.exit(0)
         }
 
-		// Initialize ADB interaction layer
-		def adbc = new ADBCommander()
+        // Initialize ADB interaction layer
+        def adbc = new ADBCommander()
 
         // Option to list all connected devices
-		if (line.hasOption("devices")) {
-        	List<IDevice> devices = adbc.getBridge().getDevices();
-			devices.each { println it }
+        if (line.hasOption("devices")) {
+            List<IDevice> devices = adbc.getBridge().getDevices()
+            devices.each { println it }
             System.exit(0)
         }
 
         // Target a specific device by its serial number before checking root or pushing busybox
-		if (line.hasOption("serial")) {
-			String selectedDevice = line.getOptionValue("serial")
+        if (line.hasOption("serial")) {
+            String selectedDevice = line.getOptionValue("serial")
             adbc.device = null
-        	List<IDevice> devices = adbc.getBridge().getDevices();
-			devices.each { it -> if (it.serialNumber == selectedDevice) { adbc.setDevice(it) } }
+            List<IDevice> devices = adbc.getBridge().getDevices()
+            devices.each { it -> if (it.serialNumber == selectedDevice) { adbc.setDevice(it) } }
         }
 
         if (adbc.device == null) {
             println "Error: No device connected. Please connect a device or specify serial with -s."
             System.exit(1)
         }
-        
+
         if (!adbc.checkRootType()) {
             println "Warning: Root access not detected. Some operations may fail."
         }
@@ -114,121 +114,121 @@ class ABP {
                 System.exit(1)
             }
         }
-		
-		// Configuration for base directory where backups are stored
-		if (line.hasOption("baseDir")) {
-			baseDir = line.getOptionValue("baseDir")
+
+        // Configuration for base directory where backups are stored
+        if (line.hasOption("baseDir")) {
+            baseDir = line.getOptionValue("baseDir")
             if (!baseDir.endsWith("/")) baseDir += "/"
         }
-		
-		// Automatically create a subfolder named with the current date (YYYY-MM-DD)
-		if (line.hasOption("createSubfolder")) {
+
+        // Automatically create a subfolder named with the current date (YYYY-MM-DD)
+        if (line.hasOption("createSubfolder")) {
             // We'll handle this more dynamically in the handlers if needed
-		}
-		
-		// Configuration for temporary directory used during restore
-		if (line.hasOption("tmpDir")) {
-			tmpDir = line.getOptionValue("tmpDir")
+        }
+
+        // Configuration for temporary directory used during restore
+        if (line.hasOption("tmpDir")) {
+            tmpDir = line.getOptionValue("tmpDir")
             if (!tmpDir.endsWith("/")) tmpDir += "/"
         }
-		
-		// --- BACKUP FLOW ---
-		if (line.hasOption("backup")) {
-			String appLocationFilter = null
-			BackupHandler bh = new BackupHandler(adbc)
+
+        // --- BACKUP FLOW ---
+        if (line.hasOption("backup")) {
+            String appLocationFilter = null
+            BackupHandler bh = new BackupHandler(adbc)
             bh.userId = userId
-			
+
             if (line.hasOption("createSubfolder")) {
                 subDir = bh.generateBackupDirName() + "/"
             }
             bh.localBackupDirectory = baseDir + subDir
             // bh.writeBackupMetadata() // Moved to after package fetch
 
-			if (line.hasOption("apks")) {
-				// Backup individual APKs and their data
-				if (line.hasOption("appLocationFilter")) {
-					appLocationFilter = line.getOptionValue("appLocationFilter")
-				}
-				bh.getInstalledPackagesFromDevice(line.hasOption("system-apps"))
-                
+            if (line.hasOption("apks")) {
+                // Backup individual APKs and their data
+                if (line.hasOption("appLocationFilter")) {
+                    appLocationFilter = line.getOptionValue("appLocationFilter")
+                }
+                bh.getInstalledPackagesFromDevice(line.hasOption("system-apps"))
+
                 // apply secondary filters if provided
-				if (appLocationFilter) bh.filterByInstallLocation(appLocationFilter)
+                if (appLocationFilter) bh.filterByInstallLocation(appLocationFilter)
 
                 bh.writeBackupMetadata() // Now it has the package list for installers.txt
-				bh.doPackageBackup()
-			} else if (line.hasOption("image")) {
-				// Backup raw partition images (e.g. /dev/block/...)
+                bh.doPackageBackup()
+            } else if (line.hasOption("image")) {
+                // Backup raw partition images (e.g. /dev/block/...)
                 bh.writeBackupMetadata()
-				String[] blockDevices = line.getOptionValues("image")
+                String[] blockDevices = line.getOptionValues("image")
                 if (blockDevices && blockDevices.length > 0) {
-    				bh.doImageBackup(blockDevices)
+                    bh.doImageBackup(blockDevices)
                 } else {
                     bh.doAllPartitionsBackup()
                 }
-			} else if (line.hasOption("tar")) {
-				// Backup via tar (e.g. full /data or /data/media)
+            } else if (line.hasOption("tar")) {
+                // Backup via tar (e.g. full /data or /data/media)
                 bh.writeBackupMetadata()
-				String[] tarConfigs = line.getOptionValues("tar")
-				// data -> /data (excluding /data/media, /data/mediadrm)
-				// media -> /data/media, /data/mediadrm
-				bh.doTarBackup(tarConfigs)
-			}
+                String[] tarConfigs = line.getOptionValues("tar")
+                // data -> /data (excluding /data/media, /data/mediadrm)
+                // media -> /data/media, /data/mediadrm
+                bh.doTarBackup(tarConfigs)
+            }
         // --- RESTORE FLOW ---
         } else if (line.hasOption("restore")) {
-			String appPackageFilter = null
-			RestoreHandler rh = new RestoreHandler(adbc)
-			rh.localBackupDirectory = baseDir
-			rh.tempDir = tmpDir
+            String appPackageFilter = null
+            RestoreHandler rh = new RestoreHandler(adbc)
+            rh.localBackupDirectory = baseDir
+            rh.tempDir = tmpDir
             if (line.hasOption("user")) {
                 rh.userId = userId
             } else {
                 rh.readBackupMetadata()
             }
-			
-			if (line.hasOption("apks")) {
-				// Restore APKs and data from local storage to device
-				if (line.hasOption("appPackageFilter")) {
-					appPackageFilter = line.getOptionValue("appPackageFilter")
-				}
-				rh.getLocalPackages()
-				rh.filterByPackageName(appPackageFilter)
-				rh.doPackageRestore()
-			} else if (line.hasOption("image")) {
-				// Restore raw partition images
-				String[] blockDeviceConfigs = line.getOptionValues("image")
-				rh.doImageRestore(blockDeviceConfigs)
-			} else if (line.hasOption("tar")) {
-				// Restore via tar archives
-				String[] tarConfigs = line.getOptionValues("tar")
-				rh.doTarRestore(tarConfigs)
-			}
-		// --- INFO FLOW ---
-		} else if (line.hasOption("info")) {
-			// Query device and local backup directory for package information
-			String appLocationFilter = null
-			String appPackageFilter = null
-			if (line.hasOption("appLocationFilter")) {
-				appLocationFilter = line.getOptionValue("appLocationFilter")
-			}
-			if (line.hasOption("appPackageFilter")) {
-				appPackageFilter = line.getOptionValue("appPackageFilter")
-			}
-			DeviceInfoHandler dih = new DeviceInfoHandler(adbc)
+
+            if (line.hasOption("apks")) {
+                // Restore APKs and data from local storage to device
+                if (line.hasOption("appPackageFilter")) {
+                    appPackageFilter = line.getOptionValue("appPackageFilter")
+                }
+                rh.getLocalPackages()
+                rh.filterByPackageName(appPackageFilter)
+                rh.doPackageRestore()
+            } else if (line.hasOption("image")) {
+                // Restore raw partition images
+                String[] blockDeviceConfigs = line.getOptionValues("image")
+                rh.doImageRestore(blockDeviceConfigs)
+            } else if (line.hasOption("tar")) {
+                // Restore via tar archives
+                String[] tarConfigs = line.getOptionValues("tar")
+                rh.doTarRestore(tarConfigs)
+            }
+        // --- INFO FLOW ---
+        } else if (line.hasOption("info")) {
+            // Query device and local backup directory for package information
+            String appLocationFilter = null
+            String appPackageFilter = null
+            if (line.hasOption("appLocationFilter")) {
+                appLocationFilter = line.getOptionValue("appLocationFilter")
+            }
+            if (line.hasOption("appPackageFilter")) {
+                appPackageFilter = line.getOptionValue("appPackageFilter")
+            }
+            DeviceInfoHandler dih = new DeviceInfoHandler(adbc)
             dih.userId = userId
-			dih.doInfo()
-			println ""
-			println "packages possible to be backed up:"
-			List<BackupPackage> packages = dih.getInstalledPackagesFromDevice(appLocationFilter, line.hasOption("system-apps"))
-			packages.each { println it}
-			println ""
-			println "packages possible to be restored: ${baseDir + subDir}"
-			packages = dih.getLocalPackagesFromDirectory(baseDir + subDir, appPackageFilter)
-			packages.each { println it}
-        } else if(line.hasOption("help")) {
-	        BackupRestoreHandler.outputCommandLineHelp(options);			
-	    } else {
-	        BackupRestoreHandler.outputCommandLineHelp(options);			
-		}
-		System.exit(0)
-	}
+            dih.doInfo()
+            println ""
+            println "packages possible to be backed up:"
+            List<BackupPackage> packages = dih.getInstalledPackagesFromDevice(appLocationFilter, line.hasOption("system-apps"))
+            packages.each { println it }
+            println ""
+            println "packages possible to be restored: ${baseDir + subDir}"
+            packages = dih.getLocalPackagesFromDirectory(baseDir + subDir, appPackageFilter)
+            packages.each { println it }
+        } else if (line.hasOption("help")) {
+            BackupRestoreHandler.outputCommandLineHelp(options)
+        } else {
+            BackupRestoreHandler.outputCommandLineHelp(options)
+        }
+        System.exit(0)
+    }
 }

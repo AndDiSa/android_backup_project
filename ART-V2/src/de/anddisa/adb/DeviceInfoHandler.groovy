@@ -12,155 +12,154 @@ import de.anddisa.adb.entities.BlockInfo
 
 
 class DeviceInfoHandler {
-	ADBCommander commander
-	NativeDevice currentDevice
+    ADBCommander commander
+    NativeDevice currentDevice
     int userId = 0
 
-	public DeviceInfoHandler(ADBCommander commander) {
-		this.commander = commander
-		DeviceManager mgr =  new DeviceManager()
-		DeviceMonitorMultiplexer allocationMonitor = new DeviceMonitorMultiplexer()
-		NativeDeviceStateMonitor stateMonitor = new NativeDeviceStateMonitor(mgr, commander.device, false)
-		currentDevice = new NativeDevice(commander.device, stateMonitor, allocationMonitor)
-	}
+    public DeviceInfoHandler(ADBCommander commander) {
+        this.commander = commander
+        DeviceManager mgr = new DeviceManager()
+        DeviceMonitorMultiplexer allocationMonitor = new DeviceMonitorMultiplexer()
+        NativeDeviceStateMonitor stateMonitor = new NativeDeviceStateMonitor(mgr, commander.device, false)
+        currentDevice = new NativeDevice(commander.device, stateMonitor, allocationMonitor)
+    }
 
-	public List<BackupPackage> getInstalledPackagesFromDevice(String filter, boolean includeSystem = false) {
-		List<BackupPackage> packages = []
+    public List<BackupPackage> getInstalledPackagesFromDevice(String filter, boolean includeSystem = false) {
+        List<BackupPackage> packages = []
 
         String pmFlags = "-f"
         if (!includeSystem) pmFlags += " -3"
 
-		String[] allPackages = commander.execForResult("pm list packages --user ${userId} ${pmFlags}").split("\\r?\\n")
-		for (String p : allPackages) {
+        String[] allPackages = commander.execForResult("pm list packages --user ${userId} ${pmFlags}").split("\\r?\\n")
+        for (String p : allPackages) {
             p = p.trim()
             if (!p.startsWith("package:")) continue
-			def pathConfig = p.replace("package:", "")
-			def index = pathConfig.lastIndexOf("=")
-			def appPath = pathConfig.substring(0, index)
-			if (filter == null || filter.trim().isEmpty() || appPath.matches(filter)) {				
-				BackupPackage bp = new BackupPackage()
-				bp.packageName = pathConfig.substring(index + 1)
-				bp.appDirectoryOnDevice = appPath.substring(0, appPath.lastIndexOf("/"))
+            def pathConfig = p.replace("package:", "")
+            def index = pathConfig.lastIndexOf("=")
+            def appPath = pathConfig.substring(0, index)
+            if (filter == null || filter.trim().isEmpty() || appPath.matches(filter)) {
+                BackupPackage bp = new BackupPackage()
+                bp.packageName = pathConfig.substring(index + 1)
+                bp.appDirectoryOnDevice = appPath.substring(0, appPath.lastIndexOf("/"))
                 if (userId == 0) {
-    				bp.dataDirectoryOnDevice = "/data/data/" + bp.packageName
+                    bp.dataDirectoryOnDevice = "/data/data/" + bp.packageName
                 } else {
                     bp.dataDirectoryOnDevice = "/data/user/${userId}/" + bp.packageName
                 }
-				bp.selected = true
-				bp.successful = false
-				packages.add(bp)
-			}
-		}
-		return packages
-	}
+                bp.selected = true
+                bp.successful = false
+                packages.add(bp)
+            }
+        }
+        return packages
+    }
 
-	public List<BackupPackage> getLocalPackagesFromDirectory(String directory, String filter) {
-		List<BackupPackage> packages = []
+    public List<BackupPackage> getLocalPackagesFromDirectory(String directory, String filter) {
+        List<BackupPackage> packages = []
 
-		def allPackages = []
-		new File(directory).eachFileMatch(~/app_.*.tar.gz/) { file -> allPackages.add(file.getName()) }
-		for (String p : allPackages) {
-			String packageName = p.replace("app_", "").replace(".tar.gz","")
-			if (filter == null || filter.trim().isEmpty() || packageName.matches(filter)) {
-				BackupPackage bp = new BackupPackage()
-				bp.packageName = packageName
-				bp.localAppPath = directory + p
-				bp.localDataPath = bp.localAppPath.replace("app_","data_")
-				bp.selected = false
-				bp.successful = false
-				packages.add(bp)
-			}
-		}
-		
-		return packages
-	}
+        def allPackages = []
+        new File(directory).eachFileMatch(~/app_.*.tar.gz/) { file -> allPackages.add(file.getName()) }
+        for (String p : allPackages) {
+            String packageName = p.replace("app_", "").replace(".tar.gz", "")
+            if (filter == null || filter.trim().isEmpty() || packageName.matches(filter)) {
+                BackupPackage bp = new BackupPackage()
+                bp.packageName = packageName
+                bp.localAppPath = directory + p
+                bp.localDataPath = bp.localAppPath.replace("app_", "data_")
+                bp.selected = false
+                bp.successful = false
+                packages.add(bp)
+            }
+        }
 
-	List<BlockInfo> listBlockDeviceMapping() {
-		List<BlockInfo> result = []
-		String[] allBlockDevices = commander.execAsRootForResult("ls -l /dev/block/mapper/").split(System.lineSeparator())
-		for (String block : allBlockDevices) {
-			String[] parts = block.split("\\s+")
-			if (parts[0].startsWith("l")) {
-				BlockInfo bi = new BlockInfo()
-				bi.name = parts[parts.length - 3]
-				bi.blockDevice = parts[parts.length - 1]
-				result.add(bi)
-			}
-		}
-		return result
-	}
+        return packages
+    }
 
-	List<BlockInfo> listBlockDeviceByName() {
-		List<BlockInfo> result = []
-		String[] allBlockDevices = commander.execAsRootForResult("ls -l /dev/block/by-name/").split(System.lineSeparator())
-		for (String block : allBlockDevices) {
-			String[] parts = block.split("\\s+")
-			if (parts[0].startsWith("l")) {
-				BlockInfo bi = new BlockInfo()
-				bi.name = parts[parts.length - 3]
-				bi.blockDevice = parts[parts.length - 1]
-				result.add(bi)
-			}
-		}
-		return result
-	}
+    List<BlockInfo> listBlockDeviceMapping() {
+        List<BlockInfo> result = []
+        String[] allBlockDevices = commander.execAsRootForResult("ls -l /dev/block/mapper/").split(System.lineSeparator())
+        for (String block : allBlockDevices) {
+            String[] parts = block.split("\\s+")
+            if (parts[0].startsWith("l")) {
+                BlockInfo bi = new BlockInfo()
+                bi.name = parts[parts.length - 3]
+                bi.blockDevice = parts[parts.length - 1]
+                result.add(bi)
+            }
+        }
+        return result
+    }
 
+    List<BlockInfo> listBlockDeviceByName() {
+        List<BlockInfo> result = []
+        String[] allBlockDevices = commander.execAsRootForResult("ls -l /dev/block/by-name/").split(System.lineSeparator())
+        for (String block : allBlockDevices) {
+            String[] parts = block.split("\\s+")
+            if (parts[0].startsWith("l")) {
+                BlockInfo bi = new BlockInfo()
+                bi.name = parts[parts.length - 3]
+                bi.blockDevice = parts[parts.length - 1]
+                result.add(bi)
+            }
+        }
+        return result
+    }
 
-	public void doInfo() {
-		if (currentDevice != null) {
-			try {
-				println "apexes: " + currentDevice.getActiveApexes()
-			} catch (Exception e) {}
-			try {
-				println "device allocation state: " + currentDevice.getAllocationState()
-			} catch (Exception e) {}
-			try {
-				println "api level: " + currentDevice.getApiLevel()
-			} catch (Exception e) {}
-			try {
-				println "package infos: " + currentDevice.getAppPackageInfos()
-			} catch (Exception e) {}
-			try {
-				println "build alias: " + currentDevice.getBuildAlias()
-			} catch (Exception e) {}
-			try {
-				println "build flavor: " + currentDevice.getBuildFlavor()
-			} catch (Exception e) {}
-			try {
-				println "build id: " + currentDevice.getBuildId()
-			} catch (Exception e) {}
-			try {
-				println "build signing keys: " + currentDevice.getBuildSigningKeys()
-			} catch (Exception e) {}
-			try {
-				println currentDevice.getInstalledPackageNames()
-			} catch (Exception e) {}
-			try {
-				println ""
-				println "mount points:"
-				List<MountPointInfo> mountPoints = currentDevice.getMountPointInfo()
-				mountPoints.each { println it }
-			} catch (Exception e) {}
-			try {
-				println "product type: " + currentDevice.getProductType()
-			} catch (Exception e) {}
-			try {
-				println "product variant: " + currentDevice.getProductVariant()
-			} catch (Exception e) {}
-			try {
-				println currentDevice.getUninstallablePackageNames()		
-			} catch (Exception e) {}
-			println ""
-			println "device block information:"
-			println "device blocks by name:"
-			List<BlockInfo> blockInfo = listBlockDeviceByName()
-			blockInfo.each { println it }
-			println ""
-			println "device block mapping:"
-			blockInfo = listBlockDeviceMapping()
-			blockInfo.each { println it }
-		} else {
-			println "error: device not available ..."
-		}
-	}
+    public void doInfo() {
+        if (currentDevice != null) {
+            try {
+                println "apexes: " + currentDevice.getActiveApexes()
+            } catch (Exception e) {}
+            try {
+                println "device allocation state: " + currentDevice.getAllocationState()
+            } catch (Exception e) {}
+            try {
+                println "api level: " + currentDevice.getApiLevel()
+            } catch (Exception e) {}
+            try {
+                println "package infos: " + currentDevice.getAppPackageInfos()
+            } catch (Exception e) {}
+            try {
+                println "build alias: " + currentDevice.getBuildAlias()
+            } catch (Exception e) {}
+            try {
+                println "build flavor: " + currentDevice.getBuildFlavor()
+            } catch (Exception e) {}
+            try {
+                println "build id: " + currentDevice.getBuildId()
+            } catch (Exception e) {}
+            try {
+                println "build signing keys: " + currentDevice.getBuildSigningKeys()
+            } catch (Exception e) {}
+            try {
+                println currentDevice.getInstalledPackageNames()
+            } catch (Exception e) {}
+            try {
+                println ""
+                println "mount points:"
+                List<MountPointInfo> mountPoints = currentDevice.getMountPointInfo()
+                mountPoints.each { println it }
+            } catch (Exception e) {}
+            try {
+                println "product type: " + currentDevice.getProductType()
+            } catch (Exception e) {}
+            try {
+                println "product variant: " + currentDevice.getProductVariant()
+            } catch (Exception e) {}
+            try {
+                println currentDevice.getUninstallablePackageNames()
+            } catch (Exception e) {}
+            println ""
+            println "device block information:"
+            println "device blocks by name:"
+            List<BlockInfo> blockInfo = listBlockDeviceByName()
+            blockInfo.each { println it }
+            println ""
+            println "device block mapping:"
+            blockInfo = listBlockDeviceMapping()
+            blockInfo.each { println it }
+        } else {
+            println "error: device not available ..."
+        }
+    }
 }

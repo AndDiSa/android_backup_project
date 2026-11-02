@@ -39,10 +39,10 @@ public class ADBCommander {
     /** Centralized Busybox path on the device */
     public static final String BB = "/data/local/tmp/busybox"
 
-	/** Thread-safe collector for shell command output */
-	public ThreadLocal<TextResponseCollector> responseCollector = new ThreadLocal<TextResponseCollector>() {
-		@Override protected TextResponseCollector initialValue() { return new TextResponseCollector() }
-	}
+    /** Thread-safe collector for shell command output */
+    public ThreadLocal<TextResponseCollector> responseCollector = new ThreadLocal<TextResponseCollector>() {
+        @Override protected TextResponseCollector initialValue() { return new TextResponseCollector() }
+    }
 
     final IShellOutputReceiver RECEIVER_SILENT = new IShellOutputReceiver() {
         @Override
@@ -75,7 +75,7 @@ public class ADBCommander {
         }
     }
 
-	final AndroidDebugBridge bridge
+    final AndroidDebugBridge bridge
 
     IDevice device
 
@@ -88,11 +88,11 @@ public class ADBCommander {
         for (; count < 300 && bridge.hasInitialDeviceList() == false; count++) {
             try { Thread.sleep(100); count++; } catch (InterruptedException e) { }
         }
-        if(count >= 300) {
+        if (count >= 300) {
             throw new RuntimeException("Timeout when waiting for device list")
         }
     }
-	
+
     public void setOutputToStdOut(boolean outputToStdOut) {
         this.outputToStdOut = outputToStdOut
     }
@@ -116,25 +116,25 @@ public class ADBCommander {
             waitDeviceList(bridge)
 
             List<IDevice> devices = bridge.getDevices()
-            if(devices != null && devices.size() > 0) {
+            if (devices != null && devices.size() > 0) {
                 device = devices.get(0)
                 System.out.println("Connected, device is " + device.getName())
             } else {
                 System.out.println("No device detected initially.")
             }
-        } catch(Exception e) {
-            if(e instanceof RuntimeException) {
-                throw (RuntimeException)e
+        } catch (Exception e) {
+            if (e instanceof RuntimeException) {
+                throw (RuntimeException) e
             } else {
                 throw new RuntimeException(e)
             }
         }
     }
 
-	public void setDevice(IDevice device) {
-		this.device = device
-		System.out.println("Connected, device is " + device.getName())
-	}
+    public void setDevice(IDevice device) {
+        this.device = device
+        System.out.println("Connected, device is " + device.getName())
+    }
 
     /**
      * Checks for root access using various 'su' commands.
@@ -296,14 +296,13 @@ public class ADBCommander {
         exec("input keyevent 4")
     }
 
-	    void home() {
+    void home() {
         exec("input keyevent 3")
     }
 
     void power() {
         exec("input keyevent 26")
     }
-	
     BufferedImage capture(boolean landscape, int sample) {
         try {
             RawImage raw = device.getScreenshot()
@@ -429,14 +428,14 @@ public class ADBCommander {
             throw new RuntimeException(e)
         }
     }
-	
-	void installApks(List<File> apks, boolean reinstall, List<String> installOptions) {
-		try {
-			device.installPackages(apks, reinstall, installOptions)
-		} catch (Exception e) {
-			throw new RuntimeException(e)
-		}
-	}
+
+    void installApks(List<File> apks, boolean reinstall, List<String> installOptions) {
+        try {
+            device.installPackages(apks, reinstall, installOptions)
+        } catch (Exception e) {
+            throw new RuntimeException(e)
+        }
+    }
 
     public String whoAmI() {
         return execForResult("whoami");
@@ -459,18 +458,18 @@ public class ADBCommander {
     void kill(String pkg) {
         exec("am force-stop " + pkg)
     }
-	
+
     void ding() {
         exec("am startservice -a net.flyingff.PLAY -c android.intent.category.DEFAULT")
     }
 
-	private static final Pattern PATTERN_TOP_ACTIVITY = Pattern.compile("topActivity=ComponentInfo\\{([^/]+)/([^/]+)\\}")
-	public String[] topActivity() {
-		Matcher mt = PATTERN_TOP_ACTIVITY.matcher(execForResult("am stack list"));
-		if(mt.find()) {
-			return [mt.group(1), mt.group(2)]
-		} else {
-			return null
-		}
-	}
+    private static final Pattern PATTERN_TOP_ACTIVITY = Pattern.compile("topActivity=ComponentInfo\\{([^/]+)/([^/]+)\\}")
+    public String[] topActivity() {
+        Matcher mt = PATTERN_TOP_ACTIVITY.matcher(execForResult("am stack list"));
+        if (mt.find()) {
+            return [mt.group(1), mt.group(2)]
+        } else {
+            return null
+        }
+    }
 }

@@ -89,23 +89,23 @@ fi
 if $image_backup; then
     echo "Creating partition image backups ..."
     for i in $PARTITIONS; do
-    	PARTITION="/dev/block/by-name/$i"
-    	echo "getting $PARTITION ..."
-    	$AS "$BB dd if=$PARTITION bs=4096 2>/dev/null" > "$i.img"
+        PARTITION="/dev/block/by-name/$i"
+        echo "getting $PARTITION ..."
+        $AS "$BB dd if=$PARTITION bs=4096 2>/dev/null" > "$i.img"
 
-    	echo "Verifying image backup..."
-    	echo -n "  Calculate checksum on device: "
-    	device_checksum="$($AS $BB sha256sum "$PARTITION" | tr -d '\r' | cut -d ' ' -f1)"
-    	echo "$device_checksum"
-    	echo -n "  Calculate checksum locally: "
-    	local_checksum="$(sha256sum "$i.img" | cut -d ' ' -f1)"
-    	echo "$local_checksum"
+        echo "Verifying image backup..."
+        echo -n "  Calculate checksum on device: "
+        device_checksum="$($AS $BB sha256sum "$PARTITION" | tr -d '\r' | cut -d ' ' -f1)"
+        echo "$device_checksum"
+        echo -n "  Calculate checksum locally: "
+        local_checksum="$(sha256sum "$i.img" | cut -d ' ' -f1)"
+        echo "$local_checksum"
 
-    	if [ "$local_checksum" == "$device_checksum" ]; then
-        	echo "Checksums match."
-    	else
-        	echo -e "\033[1mChecksums don't match! $local_checksum != $device_checksum\033[0m"
-    	fi
+        if [ "$local_checksum" == "$device_checksum" ]; then
+            echo "Checksums match."
+        else
+            echo -e "\033[1mChecksums don't match! $local_checksum != $device_checksum\033[0m"
+        fi
     done
 fi
 
