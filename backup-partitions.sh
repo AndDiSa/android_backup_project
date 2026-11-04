@@ -15,56 +15,64 @@ image_backup=true
 extra_backup=false
 graceful=false
 
-if [[ $# -gt 0 ]]; then
-    for param in "$@"; do
-        case "$param" in
-            help|-h|--help)
-                echo "Makes a full partition backup over ADB"
-                echo ""
-                echo "Options:"
-                echo "  --stop-runtime,     Stop the Android framework during backup (default for partition images)"
-                echo "  --no-graceful"
-                echo "  --graceful          Don't stop the Android framework (uses force-stop on all apps)"
-                echo "                      WARNING: Live backup of mounted partitions may be corrupt!"
-                exit 0
-                ;;
-            --data-backup)
-                data_backup=true
-                ;;
-            --no-data-backup)
-                data_backup=false
-                ;;
-            --media-backup)
-                media_backup=true
-                ;;
-            --no-media-backup)
-                media_backup=false
-                ;;
-            --image-backup)
-                image_backup=true
-                ;;
-            --no-image-backup)
-                image_backup=false
-                ;;
-            --extra-backup)
-                extra_backup=true
-                ;;
-            --no-extra-backup)
-                extra_backup=false
-                ;;
-            --graceful|--gracefull)
-                graceful=true
-                ;;
-            --no-graceful|--no-gracefull|--stop-runtime)
-                graceful=false
-                ;;
-            *)
-                echo "Unknown argument $param"
-                exit 1
-                ;;
-        esac
-    done
-fi
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        help|-h|--help)
+            echo "Makes a full partition backup over ADB"
+            echo ""
+            echo "Options:"
+            echo "  --stop-runtime,     Stop the Android framework during backup (default for partition images)"
+            echo "  --no-graceful"
+            echo "  --graceful          Don't stop the Android framework (uses force-stop on all apps)"
+            echo "                      WARNING: Live backup of mounted partitions may be corrupt!"
+            echo "  --rate-limit <rate> Rate limit transfer speed (e.g. 40m, 50m, 0/unlimited)"
+            echo "  --no-rate-limit     Disable transfer rate limit"
+            exit 0
+            ;;
+        --data-backup)
+            data_backup=true
+            ;;
+        --no-data-backup)
+            data_backup=false
+            ;;
+        --media-backup)
+            media_backup=true
+            ;;
+        --no-media-backup)
+            media_backup=false
+            ;;
+        --image-backup)
+            image_backup=true
+            ;;
+        --no-image-backup)
+            image_backup=false
+            ;;
+        --extra-backup)
+            extra_backup=true
+            ;;
+        --no-extra-backup)
+            extra_backup=false
+            ;;
+        --graceful|--gracefull)
+            graceful=true
+            ;;
+        --no-graceful|--no-gracefull|--stop-runtime)
+            graceful=false
+            ;;
+        --rate-limit)
+            shift
+            RATE_LIMIT="$1"
+            ;;
+        --no-rate-limit)
+            RATE_LIMIT=""
+            ;;
+        *)
+            echo "Unknown argument $1"
+            exit 1
+            ;;
+    esac
+    shift
+done
 
 checkPrerequisites
 
@@ -93,10 +101,14 @@ fi
 
 if $image_backup; then
     echo "Creating partition image backups ..."
+    PV_CMD="pv -trab"
+    rl_flag=$(getRateLimitPvFlag)
+    [[ -n "$rl_flag" ]] && PV_CMD="pv -trab $rl_flag"
+
     for i in $PARTITIONS; do
         PARTITION="/dev/block/by-name/$i"
         echo "getting $PARTITION ..."
-        $AS "$BB dd if=$PARTITION bs=4096 2>/dev/null" > "$i.img"
+        $AS "$BB dd if=$PARTITION bs=4096 2>/dev/null" | $PV_CMD > "$i.img"
 
         echo "Verifying image backup..."
         echo -n "  Calculate checksum on device: "

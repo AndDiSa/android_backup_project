@@ -15,6 +15,7 @@ image_backup=false
 extra_backup=false
 graceful=true
 graceful_explicit=false
+RATE_LIMIT=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -28,6 +29,8 @@ while [[ $# -gt 0 ]]; do
             echo "                      FBE encryption keys on modern Android devices."
             echo "  --stop-runtime,     Stop the Android framework (stop/start) during backup."
             echo "  --no-graceful       Default when --image-backup is used."
+            echo "  --rate-limit <rate> Rate limit transfer speed (e.g. 40m, 50m, 0/unlimited)"
+            echo "  --no-rate-limit     Disable transfer rate limit (default for backups is unlimited)"
             exit 0
             ;;
         --data-backup)
@@ -61,6 +64,13 @@ while [[ $# -gt 0 ]]; do
         --no-graceful|--no-gracefull|--stop-runtime)
             graceful=false
             graceful_explicit=true
+            ;;
+        --rate-limit)
+            shift
+            RATE_LIMIT="$1"
+            ;;
+        --no-rate-limit)
+            RATE_LIMIT=""
             ;;
         *)
             echo "Unknown argument $1"
@@ -102,6 +112,10 @@ else
     stopRuntime
 fi
 
+PV_CMD="pv -trab"
+rl_flag=$(getRateLimitPvFlag)
+[[ -n "$rl_flag" ]] && PV_CMD="pv -trab $rl_flag"
+
 if $data_backup; then
     echo "Creating full tar backup of /data excluding /data/media"
     # Avoid backing up duplicate User 0 app data while preserving the real directory
@@ -109,14 +123,14 @@ if $data_backup; then
     if $AS "[ -L /data/data ] && [ ! -L /data/user/0 ]" 2>/dev/null; then
         exclude_dup="--exclude='./data'"
     fi
-    { $AS "$BB tar -cz -C /data --exclude='./media' --exclude='./mediadrm' --exclude='./unencrypted' --exclude='./per_boot' --exclude='./gsi' --exclude='./misc/vold' --exclude='./misc/keystore' --exclude='./system_de/0/spblob' --exclude='./vendor/var/run' $exclude_dup . 2>/dev/null" || [[ $? -eq 1 ]]; } | pv -trab > data.tar.gz
+    { $AS "$BB tar -cz -C /data ${DATA_EXCLUDES[*]} $exclude_dup . 2>/dev/null" || [[ $? -eq 1 ]]; } | $PV_CMD > data.tar.gz
 fi
 
 if $media_backup; then
     echo "Creating full tar backup of /data/media"
-    { $AS "$BB tar -cz -C /data/media . 2>/dev/null" || [[ $? -eq 1 ]]; } | pv -trab > data_media.tar.gz
+    { $AS "$BB tar -cz -C /data/media . 2>/dev/null" || [[ $? -eq 1 ]]; } | $PV_CMD > data_media.tar.gz
     if $AS "[ -d /data/mediadrm ]" 2>/dev/null; then
-        { $AS "$BB tar -cz -C /data/mediadrm . 2>/dev/null" || [[ $? -eq 1 ]]; } | pv -trab > data_mediadrm.tar.gz
+        { $AS "$BB tar -cz -C /data/mediadrm . 2>/dev/null" || [[ $? -eq 1 ]]; } | $PV_CMD > data_mediadrm.tar.gz
     fi
 fi
 
@@ -125,7 +139,7 @@ if $image_backup; then
     #get data image location
     PARTITION=$($AS mount | tr -d '\r' | grep " /data " | cut -d ' ' -f1)
     echo "trying to get $PARTITION as data.img.gz"
-    $AS "$BB dd if=$PARTITION bs=16777216 2>/dev/null | $BB gzip" | pv -trab > data.img.gz
+    $AS "$BB dd if=$PARTITION bs=16777216 2>/dev/null | $BB gzip" | $PV_CMD > data.img.gz
 
     echo "Verifying image backup..."
     echo -n "  Calculate checksum on device: "

@@ -19,6 +19,39 @@ USER_ID=0
 USER_NAME=""
 BUSYBOX_PUSHED=false
 RUNTIME_STOPPED=false
+RATE_LIMIT="40m"
+
+# Common tar exclusions for /data backup & restore to protect FBE, lockscreen, APEX, and runtime state
+DATA_EXCLUDES=(
+    "--exclude='./media'"
+    "--exclude='./mediadrm'"
+    "--exclude='./unencrypted'"
+    "--exclude='./per_boot'"
+    "--exclude='./gsi'"
+    "--exclude='./apex'"
+    "--exclude='./misc/apexdata'"
+    "--exclude='./app-staging'"
+    "--exclude='./rollback'"
+    "--exclude='./rollback-observer'"
+    "--exclude='./rollback-history'"
+    "--exclude='./misc/vold'"
+    "--exclude='./misc/keystore'"
+    "--exclude='./misc/gatekeeper'"
+    "--exclude='*gatekeeper*'"
+    "--exclude='*/spblob*'"
+    "--exclude='*/spblob'"
+    "--exclude='./vendor/var/run'"
+    "--exclude='./anr'"
+    "--exclude='./tombstones'"
+    "--exclude='./lost+found'"
+)
+
+function getRateLimitPvFlag()
+{
+    if [[ -n "$RATE_LIMIT" && "$RATE_LIMIT" != "0" && "$RATE_LIMIT" != "unlimited" && "$RATE_LIMIT" != "none" ]]; then
+        echo "-L $RATE_LIMIT"
+    fi
+}
 
 function resolveUserId()
 {
@@ -293,7 +326,11 @@ function restorePackageData()
         # Ensure app has not restarted via background receiver before extracting data
         $AS "am force-stop --user $USER_ID $appPrefix" 2>/dev/null || :
         # Exclude ./lib symlink so we do not overwrite the newly created native library path
-        cat "$dataPackage" | pv -trab | $AS "$BB tar -xzpf - -C $systemDataDir/$dataDir --exclude=./lib --exclude=lib || true"
+        local pv_flags="-trab"
+        local rl_flag
+        rl_flag=$(getRateLimitPvFlag)
+        [[ -n "$rl_flag" ]] && pv_flags="$pv_flags $rl_flag"
+        cat "$dataPackage" | pv $pv_flags | $AS "$BB tar -xzpf - -C $systemDataDir/$dataDir --exclude=./lib --exclude=lib || true"
 
         # Surgical chown: Main User/Group
         $AS "chown -R $ID:$ID $systemDataDir/$dataDir"

@@ -144,6 +144,13 @@ class ABP {
         boolean isImageMode = line.hasOption("image")
         boolean effectiveGraceful = isImageMode ? (gracefulExplicit && !stopRuntimeRequested) : !stopRuntimeRequested
 
+        String rateLimitVal = null
+        if (line.hasOption("rate-limit")) {
+            rateLimitVal = line.getOptionValue("rate-limit")
+        } else if (line.hasOption("no-rate-limit")) {
+            rateLimitVal = ""
+        }
+
         try {
             // --- BACKUP FLOW ---
             if (line.hasOption("backup")) {
@@ -151,6 +158,11 @@ class ABP {
                 BackupHandler bh = new BackupHandler(adbc)
                 bh.userId = userId
                 bh.graceful = effectiveGraceful
+                if (rateLimitVal != null) {
+                    bh.rateLimit = rateLimitVal
+                } else {
+                    bh.rateLimit = "" // Default backup to unthrottled
+                }
 
                 if (line.hasOption("createSubfolder")) {
                     subDir = bh.generateBackupDirName() + "/"
@@ -194,6 +206,11 @@ class ABP {
                 rh.localBackupDirectory = baseDir
                 rh.tempDir = tmpDir
                 rh.graceful = effectiveGraceful
+                if (rateLimitVal != null) {
+                    rh.rateLimit = rateLimitVal
+                } else {
+                    rh.rateLimit = "40m" // Default restore to 40m
+                }
                 if (line.hasOption("user")) {
                     rh.userId = userId
                 } else {

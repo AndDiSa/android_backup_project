@@ -60,6 +60,8 @@ java -jar build/libs/ART-V2.jar -r -a -bd ./backup_dir
 * `-t, --tar`: Process tar archives (data, media).
 * `-g, --graceful`: Keep the Android framework running (default for tar backups/restores; force-stops apps instead of `stop` to prevent FBE key eviction on Android 14/16+).
 * `-sr, --stop-runtime` / `-ng, --no-graceful`: Stop the Android framework (`stop`/`start`) during backup/restore (default for partition image operations).
+* `-rl, --rate-limit <rate>`: Rate limit transfer speed (e.g. `40m`, default: `40m` for restore to prevent `lmkd` kills on USB 3.1).
+* `-nrl, --no-rate-limit`: Disable transfer rate limit.
 * `-u, --user <id|name>`: Specify target user or profile name.
 * `-sa, --system-apps`: Include system apps.
 * `-bd, --baseDir <dir>`: Base directory for storage.

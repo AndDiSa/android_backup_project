@@ -111,7 +111,7 @@ Example (single app): `./restore_splitted_apps.sh sargo_backup --user Island app
 
 ### full-backup.sh
 
-./full-backup.sh [--data-backup][--no-data-backup][--media-backup][--no-media-backup][--image-backup][--no-image-backup] [--graceful|--stop-runtime|--no-graceful]
+./full-backup.sh [--data-backup][--no-data-backup][--media-backup][--no-media-backup][--image-backup][--no-image-backup] [--graceful|--stop-runtime|--no-graceful] [--rate-limit <rate>|--no-rate-limit]
 
 This script does a full backup of (different parts of) the /data partition. There
 are several options to control the behaviour.
@@ -130,14 +130,17 @@ keys being dropped on modern Android devices.
 the backup. This is automatically used by default when `--image-backup` is requested
 (unless `--graceful` is explicitly passed).
 
+--rate-limit <rate> (e.g. `40m`, `50m`, or `0`/`unlimited`) limits the stream speed.
+Backups default to unlimited rate.
+
 As it cannot be guaranteed that during the backup process there will be no single modification
 on the /data partition it's quite common to get a checksum validation failure after the
 backup is finished.
 
 
-### Important Note on Encryption (FBE)
+### Important Note on Encryption (FBE) and System Modules
 
-Modern Android devices use **File-Based Encryption (FBE)**. This has significant 
+Modern Android devices use **File-Based Encryption (FBE)** and modular APEX components. This has significant 
 implications for backups and restores:
 
 1. **Partition Backups (`--image-backup`)**: These are raw block-level copies 
@@ -151,16 +154,28 @@ implications for backups and restores:
    is now the default for file-level operations in both `full-backup.sh` and `full-restore.sh` 
    to keep the framework running while force-stopping apps so encryption keys remain available. 
    Use `--stop-runtime` (or `--no-graceful`) only when you explicitly want to shut down the runtime.
+3. **Excluded Directories**: File-level `/data` tar backups and restores automatically exclude 
+   critical device-bound security, lockscreen/synthetic password keys across all profiles, 
+   and dynamic APEX module directories to prevent bootloops and authentication lockouts:
+   - Hardware keys & FBE: `/data/unencrypted`, `/data/misc/vold`, `/data/misc/keystore`
+   - Lockscreen credentials across all users: `*/spblob*`, `*gatekeeper*`
+   - APEX modules & staging: `/data/apex`, `/data/misc/apexdata`, `/data/app-staging`, `/data/rollback*`
+   - Ephemeral runtime: `/data/vendor/var/run`, `/data/per_boot`, `/data/anr`, `/data/tombstones`, `/data/gsi`
+4. **USB Transfer Throttling (`--rate-limit`)**: On fast USB 3.1/3.2 connections, the host can push data 
+   faster than the device can decompress and commit dirty pages to flash. This causes kernel memory pressure 
+   and triggers `lmkd` (Low Memory Killer Daemon) to kill `adbd`. Restoring now defaults to `--rate-limit 40m` 
+   (40 MB/s) to keep transfers smooth and prevent disconnects. Use `--no-rate-limit` to uncap.
 
 
 ### full-restore.sh
 
-./full-restore.sh [--data-backup][--no-data-backup][--media-backup][--no-media-backup][--image-backup][--no-image-backup] [--graceful|--stop-runtime|--no-graceful] <directory_name>
+./full-restore.sh [--data-backup][--no-data-backup][--media-backup][--no-media-backup][--image-backup][--no-image-backup] [--graceful|--stop-runtime|--no-graceful] [--rate-limit <rate>|--no-rate-limit] <directory_name>
 
 This script is restoring data previously created by full-backup.sh
 It accepts the same parameters as full-backup.sh (defaulting to `--graceful` for tar restores
-to avoid FBE key eviction on Android 14/16+, or `--stop-runtime` for `--image-backup`) and
-takes in addition the name of the directory from where the backup shall be restored.
+to avoid FBE key eviction on Android 14/16+, `--stop-runtime` for `--image-backup`, and
+`--rate-limit 40m` to prevent `lmkd` kills over USB 3) and takes in addition the name of the
+directory from where the backup shall be restored.
 
 
 **Important**

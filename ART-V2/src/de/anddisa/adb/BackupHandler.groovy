@@ -219,7 +219,8 @@ class BackupHandler extends BackupRestoreHandler {
                 excludeDup = "--exclude='./data'"
             }
             // Back up /data excluding media, mediadrm, FBE/keystore dirs, and duplicate User 0 dir
-            commander.execAsRootForResult("${ADBCommander.BB} tar -cz -C /data --exclude='./media' --exclude='./mediadrm' --exclude='./unencrypted' --exclude='./per_boot' --exclude='./gsi' --exclude='./misc/vold' --exclude='./misc/keystore' --exclude='./system_de/0/spblob' --exclude='./vendor/var/run' ${excludeDup} . 2>/dev/null", frTar, 15, TimeUnit.MINUTES)
+            String excludeArgs = DATA_EXCLUDES.join(" ")
+            commander.execAsRootForResult("${ADBCommander.BB} tar -cz -C /data ${excludeArgs} ${excludeDup} . 2>/dev/null", frTar, 15, TimeUnit.MINUTES)
         } else if (tarConfig.equals("data_media")) {
             commander.execAsRootForResult("${ADBCommander.BB} tar -cz -C /data/media . 2>/dev/null", frTar, 15, TimeUnit.MINUTES)
         } else if (tarConfig.equals("data_mediadrm")) {

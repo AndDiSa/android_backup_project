@@ -21,6 +21,31 @@ class BackupRestoreHandler {
     List<BackupPackage> packages = []
     int userId = 0
     boolean graceful = true
+    String rateLimit = "40m"
+
+    static final String[] DATA_EXCLUDES = [
+        "--exclude='./media'",
+        "--exclude='./mediadrm'",
+        "--exclude='./unencrypted'",
+        "--exclude='./per_boot'",
+        "--exclude='./gsi'",
+        "--exclude='./apex'",
+        "--exclude='./misc/apexdata'",
+        "--exclude='./app-staging'",
+        "--exclude='./rollback'",
+        "--exclude='./rollback-observer'",
+        "--exclude='./rollback-history'",
+        "--exclude='./misc/vold'",
+        "--exclude='./misc/keystore'",
+        "--exclude='./misc/gatekeeper'",
+        "--exclude='*gatekeeper*'",
+        "--exclude='*/spblob*'",
+        "--exclude='*/spblob'",
+        "--exclude='./vendor/var/run'",
+        "--exclude='./anr'",
+        "--exclude='./tombstones'",
+        "--exclude='./lost+found'"
+    ]
 
     static Options createCommandLineOptions() {
         final Options options = new Options()
@@ -73,6 +98,19 @@ class BackupRestoreHandler {
         options.addOption(Option.builder("ng")
                 .longOpt("no-graceful")
                 .desc("Alias for --stop-runtime")
+                .required(false)
+                .build())
+
+        options.addOption(Option.builder("rl")
+                .longOpt("rate-limit")
+                .desc("Rate limit transfer speed (e.g. 40m, 50m, 0/unlimited, default: 40m for restore)")
+                .hasArg()
+                .required(false)
+                .build())
+
+        options.addOption(Option.builder("nrl")
+                .longOpt("no-rate-limit")
+                .desc("Disable transfer rate limit")
                 .required(false)
                 .build())
 

@@ -359,7 +359,7 @@ class RestoreHandler extends BackupRestoreHandler {
             targetDir = "/data/mediadrm"
         }
         // Stream the archive into 'tar' on the device, excluding FBE key directories and runtime sockets
-        String excludes = "--exclude=./vendor/var/run --exclude=./unencrypted --exclude=./per_boot --exclude=./gsi --exclude=./misc/vold --exclude=./misc/keystore --exclude=./system_de/0/spblob"
+        String excludes = DATA_EXCLUDES.join(" ")
         println nd.executeShellV2Command(getRootWrappedCommand("${ADBCommander.BB} tar -xzpf - -C ${targetDir} ${excludes} 2>&1 || true").toString(), f)
         baos.flush()
         println baos.toString()

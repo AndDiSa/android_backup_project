@@ -21,7 +21,7 @@ sleep 5
 DIR="$1"
 
 if [[ ! -d "$DIR" ]]; then
-    echo "Usage: $0 <data-dir> [--user <ID|Name>] [apps...]"
+    echo "Usage: $0 <data-dir> [--user <ID|Name>] [--rate-limit <rate>|--no-rate-limit] [apps...]"
     echo "Must be created with ./backup_apps.sh"
     exit 2
 fi
@@ -35,6 +35,15 @@ while [[ $# -gt 0 ]]; do
         --user)
             shift
             resolveUserId "$1"
+            shift
+            ;;
+        --rate-limit)
+            shift
+            RATE_LIMIT="$1"
+            shift
+            ;;
+        --no-rate-limit)
+            RATE_LIMIT=""
             shift
             ;;
         *)

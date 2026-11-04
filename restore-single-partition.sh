@@ -31,11 +31,15 @@ stopRuntime
 echo "Restoring partition image ..."
 PARTITION="/dev/block/by-name/$2"
 echo "writing $1 to $PARTITION ..."
+PV_CMD="pv -trab"
+rl_flag=$(getRateLimitPvFlag)
+[[ -n "$rl_flag" ]] && PV_CMD="pv -trab $rl_flag"
+
 if [[ "$1" == *.gz ]]
 then
-    zcat "$1" 2>/dev/null | pv -trab | $AS "$BB dd of=$PARTITION 2>/dev/null"
+    zcat "$1" 2>/dev/null | $PV_CMD | $AS "$BB dd of=$PARTITION 2>/dev/null"
 else
-    cat "$1" 2>/dev/null | pv -trab | $AS "$BB dd of=$PARTITION 2>/dev/null"
+    cat "$1" 2>/dev/null | $PV_CMD | $AS "$BB dd of=$PARTITION 2>/dev/null"
 fi
 
 cleanup

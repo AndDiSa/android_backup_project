@@ -72,7 +72,7 @@ Ejemplo (una sola aplicación): `./restore_splitted_apps.sh sargo_backup --user 
 
 ### full-backup.sh
 
-./full-backup.sh [--data-backup][--no-data-backup][--media-backup][--no-media-backup][--image-backup][--no-image-backup] [--graceful|--stop-runtime|--no-graceful]
+./full-backup.sh [--data-backup][--no-data-backup][--media-backup][--no-media-backup][--image-backup][--no-image-backup] [--graceful|--stop-runtime|--no-graceful] [--rate-limit <rate>|--no-rate-limit]
 
 Este script realiza una copia de seguridad completa de (diferentes partes de) la partición `/data`. Hay varias opciones para controlar el comportamiento.
 
@@ -86,23 +86,27 @@ Este script realiza una copia de seguridad completa de (diferentes partes de) la
 
 `--stop-runtime` (o `--no-graceful`) detiene el entorno de ejecución de Android (`stop`/`start`) durante la copia de seguridad. Se activa por defecto cuando se solicita `--image-backup` (a menos que se indique explícitamente `--graceful`).
 
+`--rate-limit <rate>` limita la velocidad de transferencia (por defecto sin límite para copias de seguridad).
+
 Dado que no se puede garantizar que durante el proceso de copia de seguridad no haya ninguna modificación en la partición `/data`, es bastante común obtener un error de validación de suma de verificación una vez finalizada la copia.
 
 
-### Nota importante sobre cifrado (FBE)
+### Nota importante sobre cifrado (FBE), módulos APEX y límites de velocidad
 
-Los dispositivos Android modernos utilizan **Cifrado Basado en Archivos (FBE)**. Esto tiene implicaciones significativas para las copias de seguridad y restauraciones:
+Los dispositivos Android modernos utilizan **Cifrado Basado en Archivos (FBE)** y arquitectura APEX modular. Esto tiene implicaciones significativas para las copias de seguridad y restauraciones:
 
 1. **Copias de seguridad de partición (`--image-backup`)**: Estas son copias crudas a nivel de bloques (cifrado). Debido a que las claves de cifrado están vinculadas al hardware del dispositivo (TEE/SE), una imagen de partición de `/data` **no es portátil** y solo puede restaurarse en el dispositivo exacto.
 2. **Parada del Framework (Android 14/16+)**: Detener el entorno de ejecución de Android (`stop`) puede provocar que `vold`/el kernel purgue las claves de cifrado (CE) de la memoria. Si esto ocurre, las copias de seguridad y restauraciones a nivel de archivo (`tar` de `/data` y `/data/media`) fallarán. Por ello, `--graceful` es ahora el comportamiento por defecto para las operaciones a nivel de archivo tanto en `full-backup.sh` como en `full-restore.sh`, manteniendo el framework en ejecución mientras se detienen las aplicaciones para asegurar que las claves permanezcan disponibles. Usa `--stop-runtime` (o `--no-graceful`) solo cuando desees detener explícitamente el runtime.
+3. **Directorios excluidos**: Se excluyen automáticamente directorios críticos vinculados al hardware, hashes de pantalla de bloqueo de todos los perfiles (`*/spblob*`, `*gatekeeper*`) y módulos APEX (`/data/apex`, etc.) para prevenir bloqueos de autenticación o bootloops.
+4. **Límite de velocidad USB (`--rate-limit`)**: En conexiones rápidas USB 3.1/3.2, transferir datos más rápido de lo que el dispositivo puede descomprimir y escribir en almacenamiento flash puede saturar la RAM y provocar que el kernel (`lmkd`) mate el proceso `adbd`. La restauración ahora utiliza por defecto `--rate-limit 40m` (40 MB/s). Usa `--no-rate-limit` para transferir sin límite.
 
 
 ### full-restore.sh
 
-./full-restore.sh [--data-backup][--no-data-backup][--media-backup][--no-media-backup][--image-backup][--no-image-backup] [--graceful|--stop-runtime|--no-graceful] <directory_name>
+./full-restore.sh [--data-backup][--no-data-backup][--media-backup][--no-media-backup][--image-backup][--no-image-backup] [--graceful|--stop-runtime|--no-graceful] [--rate-limit <rate>|--no-rate-limit] <directory_name>
 
 Este script restaura datos creados previamente por `full-backup.sh`
-Acepta los mismos parámetros que `full-backup.sh` (usando `--graceful` por defecto para restauraciones tar con el fin de evitar la pérdida de claves FBE en Android 14/16+, o `--stop-runtime` para `--image-backup`) y, además, toma el nombre del directorio desde donde se debe restaurar la copia de seguridad.
+Acepta los mismos parámetros que `full-backup.sh` (usando `--graceful` por defecto para restauraciones tar con el fin de evitar la pérdida de claves FBE en Android 14/16+, `--stop-runtime` para `--image-backup`, y `--rate-limit 40m` para evitar caídas de `adbd` con `lmkd`) y, además, toma el nombre del directorio desde donde se debe restaurar la copia de seguridad.
 
 
 **Importante**
