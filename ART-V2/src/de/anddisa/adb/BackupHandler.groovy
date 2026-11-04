@@ -39,7 +39,20 @@ class BackupHandler extends BackupRestoreHandler {
      */
     void doImageBackup(String[] blockDevices) {
         if (blockDevices != null) {
-            blockDevices.each { doImageBackup( it ) }
+            if (graceful) {
+                remoteUtils.stopAllApps()
+                println "WARNING: Partition image backup requested with --graceful."
+                println "A live backup of a mounted filesystem may result in corruption!"
+            } else {
+                stopRuntime()
+            }
+            try {
+                blockDevices.each { doImageBackup( it ) }
+            } finally {
+                if (!graceful) {
+                    startRuntime()
+                }
+            }
         }
     }
 
@@ -81,14 +94,25 @@ class BackupHandler extends BackupRestoreHandler {
         String[] partitions = result.split("\\s+")
         println "Found ${partitions.length} partitions."
 
-        stopRuntime()
-        for (String p : partitions) {
-            if (p.trim()) {
-                println "Backing up partition: ${p}..."
-                doImageBackup("/dev/block/by-name/${p}")
+        if (graceful) {
+            remoteUtils.stopAllApps()
+            println "WARNING: Partition image backup requested with --graceful."
+            println "A live backup of a mounted filesystem may result in corruption!"
+        } else {
+            stopRuntime()
+        }
+        try {
+            for (String p : partitions) {
+                if (p.trim()) {
+                    println "Backing up partition: ${p}..."
+                    doImageBackup("/dev/block/by-name/${p}")
+                }
+            }
+        } finally {
+            if (!graceful) {
+                startRuntime()
             }
         }
-        startRuntime()
     }
 
     /**
@@ -137,9 +161,9 @@ class BackupHandler extends BackupRestoreHandler {
             p.successful &= true
             println "app package transfer successful"
         }
-        // Backup Data
+        // Backup Data (excluding ./lib symlink to avoid overwriting native library path on restore)
         FileReceiver frData = new FileReceiver(localBackupDirectory + "data_${p.packageName}.tar.gz")
-        commander.execAsRootForResult("${ADBCommander.BB} tar -cz -C \"${p.dataDirectoryOnDevice}\" . 2>/dev/null", frData, 15, TimeUnit.MINUTES)
+        commander.execAsRootForResult("${ADBCommander.BB} tar -cz -C \"${p.dataDirectoryOnDevice}\" --exclude='./lib' . 2>/dev/null", frData, 15, TimeUnit.MINUTES)
         frData.flush()
         if (frData.isCancelled()) {
             p.successful &= false
@@ -155,17 +179,37 @@ class BackupHandler extends BackupRestoreHandler {
      */
     void doTarBackup(String[] tarConfigs) {
         println "starting backup ..."
-        if (tarConfigs != null) {
-            tarConfigs.each { doTarBackup( it ) }
+        if (graceful) {
+            remoteUtils.stopAllApps()
+        } else {
+            stopRuntime()
+        }
+        try {
+            if (tarConfigs != null) {
+                tarConfigs.each { doTarBackup( it ) }
+            }
+        } finally {
+            if (!graceful) {
+                startRuntime()
+            }
         }
         println "... backup finished"
     }
 
     /**
-     * Specifically handles backing up /data (excluding media) or /data/media.
+     * Specifically handles backing up /data (excluding media) or /data/media and /data/mediadrm.
      */
     void doTarBackup(String tarConfig) {
         new File(localBackupDirectory).mkdirs()
+        if (tarConfig.equals("media")) {
+            doTarBackup("data_media")
+            String hasMediaDrm = commander.execAsRootForResult("[ -d /data/mediadrm ] && echo yes || true").trim()
+            if (hasMediaDrm == "yes") {
+                doTarBackup("data_mediadrm")
+            }
+            return
+        }
+
         FileReceiver frTar = new FileReceiver(localBackupDirectory + "${tarConfig}.tar.gz")
         if (tarConfig.equals("data")) {
             // Avoid backing up duplicate User 0 app data while preserving the real directory
@@ -174,11 +218,12 @@ class BackupHandler extends BackupRestoreHandler {
             if (symlinkCheck == "symlink_data") {
                 excludeDup = "--exclude='./data'"
             }
-            // Back up /data excluding media, mediadrm, and duplicate User 0 dir
-            commander.execAsRootForResult("${ADBCommander.BB} tar -cz -C /data --exclude='./media' --exclude='./mediadrm' ${excludeDup} . 2>/dev/null", frTar, 15, TimeUnit.MINUTES)
-        } else if (tarConfig.equals("media")) {
-            // Back up media directories only
-            commander.execAsRootForResult("${ADBCommander.BB} tar -cz -C /data ./media ./mediadrm 2>/dev/null", frTar, 15, TimeUnit.MINUTES)
+            // Back up /data excluding media, mediadrm, FBE/keystore dirs, and duplicate User 0 dir
+            commander.execAsRootForResult("${ADBCommander.BB} tar -cz -C /data --exclude='./media' --exclude='./mediadrm' --exclude='./unencrypted' --exclude='./per_boot' --exclude='./gsi' --exclude='./misc/vold' --exclude='./misc/keystore' --exclude='./system_de/0/spblob' --exclude='./vendor/var/run' ${excludeDup} . 2>/dev/null", frTar, 15, TimeUnit.MINUTES)
+        } else if (tarConfig.equals("data_media")) {
+            commander.execAsRootForResult("${ADBCommander.BB} tar -cz -C /data/media . 2>/dev/null", frTar, 15, TimeUnit.MINUTES)
+        } else if (tarConfig.equals("data_mediadrm")) {
+            commander.execAsRootForResult("${ADBCommander.BB} tar -cz -C /data/mediadrm . 2>/dev/null", frTar, 15, TimeUnit.MINUTES)
         }
         frTar.flush()
         if (frTar.isCancelled()) {

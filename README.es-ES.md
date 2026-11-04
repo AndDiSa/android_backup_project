@@ -46,14 +46,11 @@ Si se especifica `--user`, hará una copia de seguridad de las aplicaciones del 
 
 ### restore_apps.sh
 
-./restore_apps.sh [<directory_name>] [--user <ID|Name>] [apps...]
+./restore_apps.sh <directory_name> [--user <ID|Name>] [apps...]
 
-Este script restaura las aplicaciones y sus datos de una copia de seguridad previa creada por `backup_apps.sh`
-El directorio se identifica automáticamente por el dispositivo conectado y la fecha actual, o puedes pasar el nombre del directorio como parámetro. En ese caso, **todas** las aplicaciones y datos encontrados en el directorio indicado se restaurarán.
+Este script restaura las aplicaciones y sus datos de una copia de seguridad previa creada por `backup_apps.sh` desde `<directory_name>`. Por defecto se restaurarán **todas** las aplicaciones y datos encontrados en el directorio indicado, o puedes especificar uno o más archivos `app_*.tar.gz` para restaurar selectivamente.
 
 La bandera `--user` permite restaurar en un perfil de usuario específico. Si no se proporciona, el script intentará usar el ID/nombre de usuario guardado en los metadatos de la copia de seguridad, utilizando por defecto el Usuario 0 si no se encuentran metadatos.
-
-Si solo deseas restaurar una parte de ellos, cópialos en un directorio diferente y pasa ese directorio como parámetro al script.
 
 **Importante**
 
@@ -64,25 +61,18 @@ También podrías considerar restaurar solo las aplicaciones que no están dispo
 
 ### restore_splitted_apps.sh
 
-./restore_splitted_apps.sh [<directory_name>] [--user <ID|Name>] [apps...]
+./restore_splitted_apps.sh <directory_name> [--user <ID|Name>] [apps...]
 
 Este script funciona como `restore_apps.sh` pero utiliza un método de instalación diferente. La restauración con `pm install` / `pm install-multiple` a veces lleva a un proceso que se queda colgado (especialmente cuando se debe restaurar una aplicación multi-APK). En esos casos, toda la restauración queda bloqueada y solo puedes terminar el proceso, por lo que la restauración falla.
 
-Este script utiliza un método de instalación basado en transacciones para la restauración. También soporta la bandera `--user` para la restauración en Perfiles de Trabajo.
+Este script utiliza un método de instalación basado en transacciones para la restauración. También soporta la bandera `--user` para la restauración en Perfiles de Trabajo y argumentos opcionales `[apps...]` para restaurar aplicaciones específicas.
 
-
-### restore_one_splitted_app.sh
-
-./restore_one_splitted_app.sh <directory_name> [--user <ID|Name>] <app-tar-gz>
-
-Este script se utiliza para restaurar una sola aplicación usando el método de instalación basado en transacciones. Es útil cuando solo deseas restaurar una aplicación específica desde un directorio de copia de seguridad grande.
-
-Ejemplo: `./restore_one_splitted_app.sh sargo_backup --user Island app_com.example.tar.gz`
+Ejemplo (una sola aplicación): `./restore_splitted_apps.sh sargo_backup --user Island app_com.example.tar.gz`
 
 
 ### full-backup.sh
 
-./full-backup.sh [--data-backup][--no-data-backup][--media-backup][--no-media-backup][--image-backup][--no-image-backup] [--graceful]
+./full-backup.sh [--data-backup][--no-data-backup][--media-backup][--no-media-backup][--image-backup][--no-image-backup] [--graceful|--stop-runtime|--no-graceful]
 
 Este script realiza una copia de seguridad completa de (diferentes partes de) la partición `/data`. Hay varias opciones para controlar el comportamiento.
 
@@ -92,25 +82,27 @@ Este script realiza una copia de seguridad completa de (diferentes partes de) la
 
 `--image-backup` hará una copia de seguridad de toda la partición montada como `/data` como una copia 1:1
 
-`--graceful` no detendrá el framework de Android, sino que forzará la parada de todas las aplicaciones. Esto se recomienda para copias de seguridad a nivel de archivo (tar) para evitar problemas con las claves de cifrado que se pierden en algunos dispositivos.
+`--graceful` no detendrá el framework de Android, sino que forzará la parada de todas las aplicaciones. Es la opción **por defecto** para copias de seguridad a nivel de archivo (tar) para evitar problemas con las claves de cifrado FBE que se pierden en dispositivos Android modernos.
+
+`--stop-runtime` (o `--no-graceful`) detiene el entorno de ejecución de Android (`stop`/`start`) durante la copia de seguridad. Se activa por defecto cuando se solicita `--image-backup` (a menos que se indique explícitamente `--graceful`).
 
 Dado que no se puede garantizar que durante el proceso de copia de seguridad no haya ninguna modificación en la partición `/data`, es bastante común obtener un error de validación de suma de verificación una vez finalizada la copia.
 
 
 ### Nota importante sobre cifrado (FBE)
 
-Los dispositivos Android modernos utilizan **Cifrado Basado en Archivos (FBE)**. Esto tiene implicaciones significativas para las copias de seguridad:
+Los dispositivos Android modernos utilizan **Cifrado Basado en Archivos (FBE)**. Esto tiene implicaciones significativas para las copias de seguridad y restauraciones:
 
 1. **Copias de seguridad de partición (`--image-backup`)**: Estas son copias crudas a nivel de bloques (cifrado). Debido a que las claves de cifrado están vinculadas al hardware del dispositivo (TEE/SE), una imagen de partición de `/data` **no es portátil** y solo puede restaurarse en el dispositivo exacto.
-2. **Parada del Framework**: Detener el entorno de ejecución de Android (`stop`) a veces puede provocar que el kernel purgue las claves de cifrado de la memoria. Si esto ocurre, las copias de seguridad a nivel de archivo (`tar`) fallarán. Usa la bandera `--graceful` para mantener el framework en ejecución mientras se detienen las aplicaciones, asegurando que las claves permanezcan disponibles.
+2. **Parada del Framework (Android 14/16+)**: Detener el entorno de ejecución de Android (`stop`) puede provocar que `vold`/el kernel purgue las claves de cifrado (CE) de la memoria. Si esto ocurre, las copias de seguridad y restauraciones a nivel de archivo (`tar` de `/data` y `/data/media`) fallarán. Por ello, `--graceful` es ahora el comportamiento por defecto para las operaciones a nivel de archivo tanto en `full-backup.sh` como en `full-restore.sh`, manteniendo el framework en ejecución mientras se detienen las aplicaciones para asegurar que las claves permanezcan disponibles. Usa `--stop-runtime` (o `--no-graceful`) solo cuando desees detener explícitamente el runtime.
 
 
 ### full-restore.sh
 
-./full-restore.sh [--data-backup][--no-data-backup][--media-backup][--no-media-backup][--image-backup][--no-image-backup] <directory_name>
+./full-restore.sh [--data-backup][--no-data-backup][--media-backup][--no-media-backup][--image-backup][--no-image-backup] [--graceful|--stop-runtime|--no-graceful] <directory_name>
 
 Este script restaura datos creados previamente por `full-backup.sh`
-Acepta los mismos parámetros que `full-backup.sh` y, además, toma el nombre del directorio desde donde se debe restaurar la copia de seguridad.
+Acepta los mismos parámetros que `full-backup.sh` (usando `--graceful` por defecto para restauraciones tar con el fin de evitar la pérdida de claves FBE en Android 14/16+, o `--stop-runtime` para `--image-backup`) y, además, toma el nombre del directorio desde donde se debe restaurar la copia de seguridad.
 
 
 **Importante**

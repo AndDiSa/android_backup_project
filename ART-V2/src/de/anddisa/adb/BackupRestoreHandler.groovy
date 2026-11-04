@@ -20,6 +20,7 @@ class BackupRestoreHandler {
     String localBackupDirectory = "/tmp/1/"
     List<BackupPackage> packages = []
     int userId = 0
+    boolean graceful = true
 
     static Options createCommandLineOptions() {
         final Options options = new Options()
@@ -54,6 +55,24 @@ class BackupRestoreHandler {
         options.addOption(Option.builder("sa")
                 .longOpt("system-apps")
                 .desc("Include system apps in backup/list")
+                .required(false)
+                .build())
+
+        options.addOption(Option.builder("g")
+                .longOpt("graceful")
+                .desc("Don't stop the Android framework (default for tar backups/restores; force-stops apps to keep FBE keys active)")
+                .required(false)
+                .build())
+
+        options.addOption(Option.builder("sr")
+                .longOpt("stop-runtime")
+                .desc("Stop the Android framework (stop/start) during backup/restore (default for partition image operations)")
+                .required(false)
+                .build())
+
+        options.addOption(Option.builder("ng")
+                .longOpt("no-graceful")
+                .desc("Alias for --stop-runtime")
                 .required(false)
                 .build())
 

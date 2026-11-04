@@ -166,7 +166,7 @@ done
 
 echo "Finalizing permissions..."
 systemDataDir=$(getSystemDataDir)
-$AS "restorecon -Rv $systemDataDir"
+$AS "restorecon -FRDv $systemDataDir"
 
 popd > /dev/null
 

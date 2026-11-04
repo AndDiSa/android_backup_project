@@ -123,7 +123,7 @@ class RestoreHandler extends BackupRestoreHandler {
      */
     void doImageRestore(String blockDevice) {
         String[] parts = blockDevice.split("=")
-        if (parts.length == 2 && parts[0].startsWith("/dev/block") && parts[1].endsWith(".img")) {
+        if (parts.length == 2 && parts[0].startsWith("/dev/block") && (parts[1].endsWith(".img") || parts[1].endsWith(".img.gz"))) {
             File f = new File(parts[1])
             if (!f.exists()) {
                 f = new File(localBackupDirectory + parts[1])
@@ -132,19 +132,33 @@ class RestoreHandler extends BackupRestoreHandler {
                 println "caution: this may fail and leave your device unbootable and may even brick your device ... continue on your own risk"
                 Thread.sleep(10000)
                 println "flashing ${f.getAbsolutePath()} to ${parts[0]}"
-                stopRuntime()
+                if (graceful) {
+                    remoteUtils.stopAllApps()
+                    println "WARNING: Partition image restore requested with --graceful."
+                    println "Flashing a live mounted filesystem may result in severe corruption!"
+                } else {
+                    stopRuntime()
+                }
                 ByteArrayOutputStream baos = new ByteArrayOutputStream()
-                // Use Tradefed's DeviceManager and NativeDevice for robust file streaming to shell
-                DeviceManager mgr = new DeviceManager()
-                DeviceMonitorMultiplexer allocationMonitor = new DeviceMonitorMultiplexer()
-                NativeDeviceStateMonitor stateMonitor = new NativeDeviceStateMonitor(mgr, commander.device, false)
-                NativeDevice nd = new NativeDevice(commander.device, stateMonitor, allocationMonitor)
-                // Stream local file contents into 'dd' on the device
-                nd.executeShellV2Command(getRootWrappedCommand("${ADBCommander.BB} dd of=${parts[0]} 2>/dev/null").toString(), f, baos, 5, TimeUnit.MINUTES, 1)
-                baos.flush()
-                startRuntime()
-                println "... finished"
-                baos.close()
+                try {
+                    // Use Tradefed's DeviceManager and NativeDevice for robust file streaming to shell
+                    DeviceManager mgr = new DeviceManager()
+                    DeviceMonitorMultiplexer allocationMonitor = new DeviceMonitorMultiplexer()
+                    NativeDeviceStateMonitor stateMonitor = new NativeDeviceStateMonitor(mgr, commander.device, false)
+                    NativeDevice nd = new NativeDevice(commander.device, stateMonitor, allocationMonitor)
+                    String ddCmd = parts[1].endsWith(".gz")
+                            ? "${ADBCommander.BB} zcat | ${ADBCommander.BB} dd of=${parts[0]} 2>/dev/null"
+                            : "${ADBCommander.BB} dd of=${parts[0]} 2>/dev/null"
+                    // Stream local file contents into 'dd' on the device
+                    nd.executeShellV2Command(getRootWrappedCommand(ddCmd).toString(), f, baos, 15, TimeUnit.MINUTES, 1)
+                    baos.flush()
+                    println "... finished"
+                } finally {
+                    baos.close()
+                    if (!graceful) {
+                        startRuntime()
+                    }
+                }
             }
         }
     }
@@ -253,13 +267,14 @@ class RestoreHandler extends BackupRestoreHandler {
             File f = new File(p.localDataPath)
             if (f.exists()) {
                 println "restoring data to ${p.dataDirectoryOnDevice} (APP User id is ${id}) ..."
+                commander.execAsRoot("am force-stop --user ${userId} ${p.packageName}")
                 ByteArrayOutputStream baos = new ByteArrayOutputStream()
                 DeviceManager mgr = new DeviceManager()
                 DeviceMonitorMultiplexer allocationMonitor = new DeviceMonitorMultiplexer()
                 NativeDeviceStateMonitor stateMonitor = new NativeDeviceStateMonitor(mgr, commander.device, false)
                 NativeDevice nd = new NativeDevice(commander.device, stateMonitor, allocationMonitor)
-                // Stream local data archive into 'tar' on the device
-                nd.executeShellV2Command(getRootWrappedCommand("${ADBCommander.BB} tar -xzpf - -C ${p.dataDirectoryOnDevice} . 2>/dev/null").toString(), f, baos, 5, TimeUnit.MINUTES, 1)
+                // Stream local data archive into 'tar' on the device (excluding ./lib symlink)
+                nd.executeShellV2Command(getRootWrappedCommand("${ADBCommander.BB} tar -xzpf - -C ${p.dataDirectoryOnDevice} --exclude=./lib --exclude=lib . 2>/dev/null || true").toString(), f, baos, 5, TimeUnit.MINUTES, 1)
                 baos.flush()
                 println "... finished"
                 baos.close()
@@ -277,7 +292,8 @@ class RestoreHandler extends BackupRestoreHandler {
                 }
 
                 // Force restorecon to update SELinux labels (including MCS categories for Work Profiles)
-                commander.execAsRoot("restorecon -FRv ${p.dataDirectoryOnDevice}")
+                commander.execAsRoot("restorecon -FRDv ${p.dataDirectoryOnDevice}")
+                commander.execAsRoot("am force-stop --user ${userId} ${p.packageName}")
             } else {
                 println "No data package found for ${p.packageName}"
             }
@@ -289,13 +305,22 @@ class RestoreHandler extends BackupRestoreHandler {
      */
     void doTarRestore(String[] tarConfigs) {
         println "starting restore ..."
-        stopRuntime()
-        for (String config : tarConfigs) {
-            doTarRestore(config)
+        if (graceful) {
+            remoteUtils.stopAllApps()
+        } else {
+            stopRuntime()
         }
-        // Final SELinux label fix for the entire /data partition
-        commander.execAsRoot("restorecon -FRDv /data")
-        startRuntime()
+        try {
+            for (String config : tarConfigs) {
+                doTarRestore(config)
+            }
+            // Final SELinux label fix for restored /data directories
+            commander.execAsRoot("restorecon -FRDv /data/data /data/user /data/user_de /data/app /data/system /data/system_ce /data/system_de /data/misc_ce /data/misc_de 2>/dev/null || true")
+        } finally {
+            if (!graceful) {
+                startRuntime()
+            }
+        }
         println "... restore finished"
     }
 
@@ -303,17 +328,47 @@ class RestoreHandler extends BackupRestoreHandler {
      * Restores a tar archive to the /data partition.
      */
     void doTarRestore(String tarConfig) {
+        if (tarConfig == "media") {
+            File dataMediaFile = new File(localBackupDirectory + "data_media.tar.gz")
+            if (dataMediaFile.exists()) {
+                doTarRestore("data_media")
+                File dataMediaDrmFile = new File(localBackupDirectory + "data_mediadrm.tar.gz")
+                if (dataMediaDrmFile.exists()) {
+                    doTarRestore("data_mediadrm")
+                }
+                return
+            }
+        }
         println "restoring ${tarConfig} to /data ..."
         File f = new File(localBackupDirectory + tarConfig + ".tar.gz")
+        if (!f.exists()) {
+            println "${f.absolutePath} not found!"
+            return
+        }
         ByteArrayOutputStream baos = new ByteArrayOutputStream()
         DeviceManager mgr = new DeviceManager()
         DeviceMonitorMultiplexer allocationMonitor = new DeviceMonitorMultiplexer()
         NativeDeviceStateMonitor stateMonitor = new NativeDeviceStateMonitor(mgr, commander.device, false)
         NativeDevice nd = new NativeDevice(commander.device, stateMonitor, allocationMonitor)
-        // Stream the archive into 'tar' on the device
-        println nd.executeShellV2Command(getRootWrappedCommand("${ADBCommander.BB} tar -xvzf - -C /data --exclude=./**/var/* --exclude=./**/run/* 2>&1").toString(), f)
+        String targetDir = "/data"
+        if (tarConfig == "data_media") {
+            commander.execAsRoot("mkdir -p /data/media")
+            targetDir = "/data/media"
+        } else if (tarConfig == "data_mediadrm") {
+            commander.execAsRoot("mkdir -p /data/mediadrm")
+            targetDir = "/data/mediadrm"
+        }
+        // Stream the archive into 'tar' on the device, excluding FBE key directories and runtime sockets
+        String excludes = "--exclude=./vendor/var/run --exclude=./unencrypted --exclude=./per_boot --exclude=./gsi --exclude=./misc/vold --exclude=./misc/keystore --exclude=./system_de/0/spblob"
+        println nd.executeShellV2Command(getRootWrappedCommand("${ADBCommander.BB} tar -xzpf - -C ${targetDir} ${excludes} 2>&1 || true").toString(), f)
         baos.flush()
         println baos.toString()
+        if (tarConfig == "media" || tarConfig == "data_media") {
+            commander.execAsRoot("chown -R media_rw:media_rw /data/media 2>/dev/null || true")
+            commander.execAsRoot("restorecon -FRDv /data/media")
+        } else if (tarConfig == "data_mediadrm") {
+            commander.execAsRoot("restorecon -FRDv /data/mediadrm")
+        }
         println "... finished"
         baos.close()
     }

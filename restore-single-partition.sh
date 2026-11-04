@@ -11,6 +11,7 @@ curr_dir="$(dirname "$0")"
 . "$curr_dir/functions.sh"
 
 set -e   # fail early
+trap cleanup EXIT
 
 checkPrerequisites
 

@@ -56,7 +56,10 @@ java -jar build/libs/ART-V2.jar -r -a -bd ./backup_dir
 * `-r, --restore`: Restore a backup.
 * `-a, --apks`: Process applications (APKs and data).
 * `-i, --image`: Process partition images (all if no args).
+* `-in, --info`: Dump device and backup info.
 * `-t, --tar`: Process tar archives (data, media).
+* `-g, --graceful`: Keep the Android framework running (default for tar backups/restores; force-stops apps instead of `stop` to prevent FBE key eviction on Android 14/16+).
+* `-sr, --stop-runtime` / `-ng, --no-graceful`: Stop the Android framework (`stop`/`start`) during backup/restore (default for partition image operations).
 * `-u, --user <id|name>`: Specify target user or profile name.
 * `-sa, --system-apps`: Include system apps.
 * `-bd, --baseDir <dir>`: Base directory for storage.

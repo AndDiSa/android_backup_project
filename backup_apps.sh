@@ -10,6 +10,7 @@ curr_dir="$(dirname "$0")"
 
 set -e
 set -o pipefail
+trap cleanup EXIT
 
 SYSTEM_APPS=0
 while [[ $# -gt 0 ]]; do
@@ -80,9 +81,9 @@ while IFS= read -r line <&3; do
     $AS "am force-stop --user $USER_ID $dataDir"
 
     echo "Backing up APK..."
-    $AS "$BB tar -cz -C \"$appDir\" . 2>/dev/null" | pv -trab > "app_${dataDir}.tar.gz"
+    { $AS "$BB tar -cz -C \"$appDir\" . 2>/dev/null" || [[ $? -eq 1 ]]; } | pv -trab > "app_${dataDir}.tar.gz"
     echo "Backing up Data..."
-    $AS "$BB tar -cz -C \"$systemDataDir/$dataDir\" . 2>/dev/null" | pv -trab > "data_${dataDir}.tar.gz"
+    { $AS "$BB tar -cz -C \"$systemDataDir/$dataDir\" --exclude='./lib' . 2>/dev/null" || [[ $? -eq 1 ]]; } | pv -trab > "data_${dataDir}.tar.gz"
 
 done 3< <(echo "$PACKAGES" | tr " " "\n")
 

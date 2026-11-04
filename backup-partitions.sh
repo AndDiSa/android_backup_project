@@ -6,11 +6,12 @@ curr_dir="$(dirname "$0")"
 . "$curr_dir/functions.sh"
 
 set -e   # fail early
+trap cleanup EXIT
 
 use_adb_root=false
 data_backup=true
 media_backup=false
-image_backup=false
+image_backup=true
 extra_backup=false
 graceful=false
 
@@ -18,10 +19,11 @@ if [[ $# -gt 0 ]]; then
     for param in "$@"; do
         case "$param" in
             help|-h|--help)
-                echo "Makes a full backup over ADB"
-                echo "tar /data, binary img /data block"
+                echo "Makes a full partition backup over ADB"
                 echo ""
                 echo "Options:"
+                echo "  --stop-runtime,     Stop the Android framework during backup (default for partition images)"
+                echo "  --no-graceful"
                 echo "  --graceful          Don't stop the Android framework (uses force-stop on all apps)"
                 echo "                      WARNING: Live backup of mounted partitions may be corrupt!"
                 exit 0
@@ -50,8 +52,11 @@ if [[ $# -gt 0 ]]; then
             --no-extra-backup)
                 extra_backup=false
                 ;;
-            --graceful)
+            --graceful|--gracefull)
                 graceful=true
+                ;;
+            --no-graceful|--no-gracefull|--stop-runtime)
+                graceful=false
                 ;;
             *)
                 echo "Unknown argument $param"

@@ -7,12 +7,14 @@ curr_dir="$(dirname "$0")"
 . "$curr_dir/functions.sh"
 
 set -e   # fail early
+trap cleanup EXIT
 
 data_backup=true
 media_backup=false
 image_backup=false
 extra_backup=false
-graceful=false
+graceful=true
+graceful_explicit=false
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -22,8 +24,10 @@ while [[ $# -gt 0 ]]; do
             echo ""
             echo "Options:"
             echo "  --graceful          Don't stop the Android framework (uses force-stop on all apps)"
-            echo "                      Recommended for file-level backups (tar) to avoid dropping"
-            echo "                      encryption keys on some devices."
+            echo "                      Default for file-level backups (tar) to avoid dropping"
+            echo "                      FBE encryption keys on modern Android devices."
+            echo "  --stop-runtime,     Stop the Android framework (stop/start) during backup."
+            echo "  --no-graceful       Default when --image-backup is used."
             exit 0
             ;;
         --data-backup)
@@ -50,8 +54,13 @@ while [[ $# -gt 0 ]]; do
         --no-extra-backup)
             extra_backup=false
             ;;
-        --graceful)
+        --graceful|--gracefull)
             graceful=true
+            graceful_explicit=true
+            ;;
+        --no-graceful|--no-gracefull|--stop-runtime)
+            graceful=false
+            graceful_explicit=true
             ;;
         *)
             echo "Unknown argument $1"
@@ -60,6 +69,11 @@ while [[ $# -gt 0 ]]; do
     esac
     shift
 done
+
+if $image_backup && ! $graceful_explicit; then
+    echo "Note: --image-backup requested; stopping Android runtime by default for raw partition consistency (use --graceful to override)."
+    graceful=false
+fi
 
 checkPrerequisites
 
@@ -74,6 +88,7 @@ checkForCleanData
 pushBusybox
 
 mkBackupDir
+writeBackupMetadata
 pushd "$DIR" > /dev/null
 
 if $graceful; then
@@ -94,13 +109,15 @@ if $data_backup; then
     if $AS "[ -L /data/data ] && [ ! -L /data/user/0 ]" 2>/dev/null; then
         exclude_dup="--exclude='./data'"
     fi
-    $AS "$BB tar -cz -C /data --exclude='./media' --exclude='./mediadrm' $exclude_dup . 2>/dev/null" | pv -trab > data.tar.gz
+    { $AS "$BB tar -cz -C /data --exclude='./media' --exclude='./mediadrm' --exclude='./unencrypted' --exclude='./per_boot' --exclude='./gsi' --exclude='./misc/vold' --exclude='./misc/keystore' --exclude='./system_de/0/spblob' --exclude='./vendor/var/run' $exclude_dup . 2>/dev/null" || [[ $? -eq 1 ]]; } | pv -trab > data.tar.gz
 fi
 
 if $media_backup; then
     echo "Creating full tar backup of /data/media"
-    $AS "$BB tar -cz -C /data/media . 2>/dev/null" | pv -trab > data_media.tar.gz
-    $AS "$BB tar -cz -C /data/mediadrm . 2>/dev/null" | pv -trab > data_mediadrm.tar.gz
+    { $AS "$BB tar -cz -C /data/media . 2>/dev/null" || [[ $? -eq 1 ]]; } | pv -trab > data_media.tar.gz
+    if $AS "[ -d /data/mediadrm ]" 2>/dev/null; then
+        { $AS "$BB tar -cz -C /data/mediadrm . 2>/dev/null" || [[ $? -eq 1 ]]; } | pv -trab > data_mediadrm.tar.gz
+    fi
 fi
 
 if $image_backup; then

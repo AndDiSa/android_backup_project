@@ -16,7 +16,7 @@ class RemoteAccessUtilities {
     }
 
     def String cleanup() {
-        commander.execAsRoot("rm ${ADBCommander.BB}")
+        commander.execAsRoot("rm -f ${ADBCommander.BB} 2>/dev/null || true")
     }
 
     def boolean checkForCleanData() {
@@ -42,6 +42,13 @@ class RemoteAccessUtilities {
 
     def void stopAllApps() {
         println "## Force-stopping all applications for all users..."
+        commander.execAsRoot("am kill-all 2>/dev/null || true")
+        Set<String> excludedPackages = [
+            "android",
+            "com.android.systemui",
+            "com.android.shell",
+            "com.topjohnwu.magisk"
+        ] as Set
         String usersList = commander.execForResult("pm list users")
         // UserInfo{0:Owner:13} running
         usersList.eachLine { line ->
@@ -50,12 +57,19 @@ class RemoteAccessUtilities {
                 def uid = matcher.group(1)
                 println "   Processing User $uid..."
                 String pkgs = commander.execForResult("pm list packages --user $uid")
+                List<String> stopCommands = []
                 pkgs.eachLine { pkgLine ->
                     pkgLine = pkgLine.trim()
                     if (pkgLine.startsWith("package:")) {
                         def pkg = pkgLine.substring(8).trim()
-                        commander.execAsRoot("am force-stop --user $uid $pkg")
+                        if (pkg && !excludedPackages.contains(pkg)) {
+                            stopCommands.add("am force-stop --user ${uid} ${pkg}")
+                        }
                     }
+                }
+                // Execute in batches to avoid hundreds of separate ADB connections
+                stopCommands.collate(30).each { batch ->
+                    commander.execAsRoot(batch.join("; "))
                 }
             }
         }

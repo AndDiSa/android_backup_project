@@ -17,6 +17,8 @@ BB="/data/local/tmp/busybox"
 
 USER_ID=0
 USER_NAME=""
+BUSYBOX_PUSHED=false
+RUNTIME_STOPPED=false
 
 function resolveUserId()
 {
@@ -63,7 +65,13 @@ function resolveUserName()
 
 function cleanup()
 {
-    $AS "rm $BB"
+    if [[ "${BUSYBOX_PUSHED:-false}" == "true" && -n "$AS" ]]; then
+        $AS "rm -f $BB" 2>/dev/null || :
+        BUSYBOX_PUSHED=false
+    fi
+    if [[ "${RUNTIME_STOPPED:-false}" == "true" && -n "$AS" ]]; then
+        startRuntime || :
+    fi
 }
 
 function checkForCleanData()
@@ -261,6 +269,7 @@ function restorePackageData()
     systemDataDir=$(getSystemDataDir)
 
     echo "## Now installing app data"
+    $AS "am force-stop --user $USER_ID $appPrefix" 2>/dev/null || :
     clearAppData "$appPrefix" "$systemDataDir"
     sleep 1
 
@@ -281,7 +290,10 @@ function restorePackageData()
 
     if [[ -f "$dataPackage" ]]; then
         echo "Restoring data from $dataPackage"
-        cat "$dataPackage" | pv -trab | $AS "$BB tar -xzpf - -C $systemDataDir/$dataDir"
+        # Ensure app has not restarted via background receiver before extracting data
+        $AS "am force-stop --user $USER_ID $appPrefix" 2>/dev/null || :
+        # Exclude ./lib symlink so we do not overwrite the newly created native library path
+        cat "$dataPackage" | pv -trab | $AS "$BB tar -xzpf - -C $systemDataDir/$dataDir --exclude=./lib --exclude=lib || true"
 
         # Surgical chown: Main User/Group
         $AS "chown -R $ID:$ID $systemDataDir/$dataDir"
@@ -296,9 +308,10 @@ function restorePackageData()
         fi
 
         # Force restorecon to update SELinux labels.
-        # The -F flag is important to force-reset the context, ensuring the correct MCS
-        # categories (e.g. :c512,c768) are applied for work profile data isolation.
-        $AS "restorecon -FRv $systemDataDir/$dataDir"
+        # The -F and -D flags force-reset the context (including default app data contexts),
+        # ensuring the correct MCS categories (e.g. :c512,c768) are applied for work profile isolation.
+        $AS "restorecon -FRDv $systemDataDir/$dataDir"
+        $AS "am force-stop --user $USER_ID $appPrefix" 2>/dev/null || :
     else
         echo "No data package found for $appPrefix"
     fi
@@ -378,6 +391,7 @@ function pushBusybox()
     echo "Pushing busybox to device ($target_arch)..."
     $A push "busybox-ndk/busybox-$target_arch" "$BB"
     $AS "chmod 755 $BB"
+    BUSYBOX_PUSHED=true
 
     # Redirect both stdout AND stderr, and explicitly run a harmless applet 
     # to confirm it's working natively.
@@ -389,30 +403,41 @@ function pushBusybox()
 
 function stopRuntime()
 {
-    echo "## Stop Runtime" && $AS stop
+    echo "## Stop Runtime"
+    $AS stop
+    RUNTIME_STOPPED=true
 }
 
 function startRuntime()
 {
-    echo "## Restart Runtime" && $AS start
+    echo "## Restart Runtime"
+    $AS start
+    RUNTIME_STOPPED=false
 }
 
 function stopAllApps()
 {
     echo "## Force-stopping all applications for all users..."
+    $AS "am kill-all" 2>/dev/null || :
     # Get all user IDs
     local users
     users=$($A shell pm list users | tr -d '\r' | grep "UserInfo" | cut -d "{" -f2 | cut -d ":" -f1)
 
     for uid in $users; do
         echo "   Processing User $uid..."
-        # Get all packages for this user
+        # Get all packages for this user and stop them in a single device shell session
         local pkgs
         pkgs=$($A shell pm list packages --user "$uid" | tr -d '\r' | cut -d ":" -f2)
-        for pkg in $pkgs; do
-            # We don't need to wait for each one, so we can background or just run fast
-            $AS "am force-stop --user $uid $pkg"
-        done
+        if [[ -n "$pkgs" ]]; then
+            for pkg in $pkgs; do
+                case "$pkg" in
+                    android|com.android.systemui|com.android.shell|com.topjohnwu.magisk)
+                        continue
+                        ;;
+                esac
+                echo "am force-stop --user $uid $pkg >/dev/null 2>&1 || true"
+            done | $AS sh
+        fi
     done
     echo "## All applications stopped."
 }

@@ -114,7 +114,7 @@ done
 
 echo "Finalizing permissions for the entire user data root..."
 systemDataDir=$(getSystemDataDir)
-$AS "restorecon -Rv $systemDataDir"
+$AS "restorecon -FRDv $systemDataDir"
 
 popd > /dev/null
 
